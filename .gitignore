@@ -2,3 +2,4 @@
 data/
 .venv/
 .db
+downloader/dnb_records.db
