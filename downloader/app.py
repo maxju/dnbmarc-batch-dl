@@ -4,7 +4,7 @@ from pymarc import map_xml
 import logging
 import os
 from sqlalchemy import create_engine, Column, String, Integer, Sequence
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -31,7 +31,9 @@ class DNBRecord(Base):
     path = Column(String) # file system path to pdf
 
 # Database setup
-engine = create_engine('sqlite:///dnb_records.db')
+current_dir = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(current_dir, 'dnb_records.db')
+engine = create_engine(f'sqlite:///{db_path}')
 Base.metadata.drop_all(engine)  # ACHTUNG! Drop the existing table if it exists
 Base.metadata.create_all(engine)  # Create the tables
 
@@ -96,11 +98,17 @@ def process_record(record):
         logging.error(f"Error processing record: {e}")
 
 
-# Streaming MARC parsing using map_xml
+# Initialize variables
 records_to_add = []
 batch_size = 1000
 records = 0
-marc_file_path = '../data/dnb-all_online_hochschulschriften_frei_dnbmarc_20240327mrc.xml'  # Update to your XML file path
+
+# Construct the path to the MARC XML file
+data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+marc_file = 'dnb-all_online_hochschulschriften_frei_dnbmarc_20240327mrc.xml'
+marc_file_path = os.path.join(data_dir, marc_file)
+
+# Process the MARC XML file
 map_xml(process_record, marc_file_path)
 
 # Commit any remaining records
