@@ -2,11 +2,11 @@ import logging
 import os
 from sqlalchemy import create_engine, Column, String, Integer, Sequence, select, func
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import sessionmaker, scoped_session, Session
 import requests
-from sqlalchemy.orm import Session
 from model import engine, DNBRecord, Session as ModelSession
 from datetime import datetime
+import time
 from sqlalchemy.exc import SQLAlchemyError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
@@ -36,8 +36,7 @@ def download_and_save_file(id, url, download_dir, timeout=90):
         with open(file_path, 'wb') as file:
             file.write(response.content)
 
-        print(f"Downloaded {file_path}")
-        return file_path
+        return file_name
 
     except requests.RequestException as e:
         logging.error(f"Error downloading file from {url}: {e}")
@@ -60,9 +59,9 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
 
         if url_dnb_archive:
             try:
-                file_path = download_and_save_file(record.idn, url_dnb_archive, download_dir, timeout=60)
-                if file_path:
-                    record.path = file_path
+                file_name = download_and_save_file(record.idn, url_dnb_archive, download_dir, timeout=60)
+                if file_name:
+                    record.path = file_name
                     session.commit()
                     logging.info(f"Successfully downloaded and updated record {record_id}")
                 else:
@@ -81,15 +80,29 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
 
 def process_records(download_dir, max_concurrent_downloads=20, batch_size=1000):
     start_time = datetime.now()
-    
+
     Session = scoped_session(ModelSession)
 
     try:
-        total_records = Session().query(func.count(DNBRecord.id)).filter(
+        records_with_url = Session().query(func.count(DNBRecord.id)).filter(
+            DNBRecord.url_dnb_archive.isnot(None)
+        ).scalar()
+
+        records_with_file = Session().query(func.count(DNBRecord.id)).filter(
+            DNBRecord.url_dnb_archive.isnot(None),
+            DNBRecord.path.isnot(None)
+        ).scalar()
+
+        records_to_process = Session().query(func.count(DNBRecord.id)).filter(
             DNBRecord.url_dnb_archive.isnot(None),
             DNBRecord.path.is_(None)
         ).scalar()
-        print(f"Processing {total_records} records...")
+
+        print(f"Not processing {records_with_file} records with file already downloaded...")
+        print(f"Processing {records_to_process} records...")
+
+        completed_records = records_with_file
+        last_progress_update = time.time()
 
         with ThreadPoolExecutor(max_workers=max_concurrent_downloads) as executor:
             active_futures = deque()
@@ -122,8 +135,18 @@ def process_records(download_dir, max_concurrent_downloads=20, batch_size=1000):
 
                 try:
                     completed_future.result()
+                    completed_records += 1
+
+                    # Update progress every 1 second
+                    current_time = time.time()
+                    if current_time - last_progress_update >= 1:
+                        progress = (completed_records / records_with_url) * 100
+                        print(f"\rProgress: {progress:.2f}% ({completed_records}/{records_to_process})", end="", flush=True)
+                        last_progress_update = current_time
                 except Exception as e:
                     logging.error(f"Exception in worker thread: {e}")
+
+        print(f"\rProgress: 100.00% ({records_to_process}/{records_to_process})")
 
     except SQLAlchemyError as e:
         logging.error(f"Database error: {e}")
@@ -156,7 +179,6 @@ if __name__ == "__main__":
     download_dir = os.getenv('DOWNLOAD_DIR') or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data/files')
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Download directory: {download_dir}")
-    logging.getLogger('').setLevel(logging.INFO)
+    logging.getLogger('').setLevel(logging.WARNING)
 
-
-    process_records(download_dir=download_dir, max_concurrent_downloads=20, batch_size=1000)
+    process_records(download_dir=download_dir, max_concurrent_downloads=12, batch_size=1000)
