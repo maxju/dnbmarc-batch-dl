@@ -1,6 +1,6 @@
 from lxml import etree
 from pymarc import MARCReader
-from pymarc import map_xml  # Import map_xml from pymarc
+from pymarc import map_xml
 import logging
 import os
 from sqlalchemy import create_engine, Column, String, Integer, Sequence
@@ -15,7 +15,7 @@ Base = declarative_base()
 # Define the DNBRecord class
 class DNBRecord(Base):
     __tablename__ = 'dnb_records'
-    id = Column(Integer, Sequence('record_id_seq'), primary_key=True)
+    id = Column(Integer, primary_key=True)
     title = Column(String)
     author = Column(String)
     publication_year = Column(String)
@@ -28,10 +28,11 @@ class DNBRecord(Base):
     university = Column(String)
     year = Column(String)
     urn = Column(String)
+    path = Column(String) # file system path to pdf
 
 # Database setup
 engine = create_engine('sqlite:///dnb_records.db')
-Base.metadata.drop_all(engine)  # Drop the existing table if it exists
+Base.metadata.drop_all(engine)  # ACHTUNG! Drop the existing table if it exists
 Base.metadata.create_all(engine)  # Create the tables
 
 Session = sessionmaker(bind=engine)
@@ -49,11 +50,12 @@ def process_record(record):
     global records
     try:
         records += 1
-
+        identifier = safe_extract(record, '001', 'a')
+        logging.info(f"Processed record {records}: {identifier}")
+        title = safe_extract(record, '245', 'a')  # title
         type_of_material = safe_extract(record, '502', 'b')  # type of material
         university = safe_extract(record, '502', 'c')  # university
         year = safe_extract(record, '502', 'd')  # year
-        title = safe_extract(record, '245', 'a')  # title
         author = safe_extract(record, '110', 'a')  # author
         publication_year = safe_extract(record, '264', 'c')  # publication year
         issn = safe_extract(record, '022', 'a')  # ISSN
@@ -65,6 +67,7 @@ def process_record(record):
 
         # Create a new record instance
         new_record = DNBRecord(
+            id=identifier,
             title=title,
             author=author,
             publication_year=publication_year,
@@ -81,7 +84,6 @@ def process_record(record):
 
         records_to_add.append(new_record)
 
-        logging.info(f"Processed record {records}: {title}")
         # Commit records in batches
         if len(records_to_add) >= batch_size:
             session.add_all(records_to_add)
