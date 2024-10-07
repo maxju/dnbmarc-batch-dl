@@ -2,4 +2,5 @@
 data/
 .venv/
 .db
+__pycache__/
 downloader/dnb_records.db

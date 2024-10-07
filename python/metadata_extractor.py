@@ -1,4 +1,3 @@
-from lxml import etree
 from pymarc import MARCReader
 from pymarc import map_xml
 import logging
@@ -8,49 +7,7 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
-
-logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Define the Base class
-Base = declarative_base()
-
-# Define the DNBRecord class
-class DNBRecord(Base):
-    __tablename__ = 'dnb_records'
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4) # internal db uuid
-    idn = Column(String, unique=True, index=True)  # DNB IDN identifier
-    title = Column(Text)
-    title_additional = Column(Text)
-    title_author = Column(Text)
-    author_person_id = Column(String)
-    author_person_name = Column(Text)
-    author_person_role = Column(String)
-    author_institution_id = Column(String)
-    author_institution_name = Column(Text)
-    publication_year = Column(String)
-    issn = Column(String)
-    keywords = Column(Text)
-    country = Column(String)
-    language = Column(String)
-    ddc = Column(String)
-    type_of_material = Column(String)
-    university = Column(String)
-    year = Column(String)
-    urn = Column(String)
-    path = Column(String)
-    url_dnb_archive = Column(String)
-    url_resolving_system = Column(String)
-    url_publisher = Column(String)
-
-# Database setup
-current_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(current_dir, 'dnb_records.db')
-engine = create_engine(f'sqlite:///{db_path}')
-Base.metadata.drop_all(engine)  # ACHTUNG! Drop the existing table if it exists
-Base.metadata.create_all(engine)  # Create the tables
-
-Session = sessionmaker(bind=engine)
-session = Session()
+from model import DNBRecord, Session
 
 def safe_extract(record, field_tag, subfield_code, ind1=None, ind2=None):
     """Safely extract a subfield from a MARC record, optionally matching indicators."""
@@ -58,7 +15,7 @@ def safe_extract(record, field_tag, subfield_code, ind1=None, ind2=None):
         fields = record.get_fields(field_tag)
         if ind1 is not None and ind2 is not None:
             fields = [f for f in fields if f.indicator1 == ind1 and f.indicator2 == ind2]
-        
+
         if fields:
             if subfield_code is None:
                 return fields[0].data if fields[0].data else None
@@ -71,6 +28,7 @@ def safe_extract(record, field_tag, subfield_code, ind1=None, ind2=None):
 
 def process_record(record):
     global records
+    global session
     try:
         records += 1
         identifier = safe_extract(record, '001', None) # IDN identifier
@@ -142,22 +100,28 @@ def process_record(record):
     except Exception as e:
         logging.error(f"Error processing record: {e}")
 
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Initialize variables
-records_to_add = []
-batch_size = 1000
-records = 0
+    session = Session()
 
-# Construct the path to the MARC XML file
-data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
-marc_file = 'dnb-all_online_hochschulschriften_frei_dnbmarc_20240327mrc.xml'
-marc_file_path = os.path.join(data_dir, marc_file)
+    # Initialize variables
+    records_to_add = []
+    batch_size = 1000
+    records = 0
 
-# Process the MARC XML file
-map_xml(process_record, marc_file_path)
+    # Construct the path to the MARC XML file
+    data_dir = os.getenv('DATA_DIR') or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '../data')
+    marc_file = 'dnb-all_online_hochschulschriften_frei_dnbmarc_20240327mrc.xml'
+    marc_file_path = os.path.join(data_dir, marc_file)
 
-# Commit any remaining records
-if records_to_add:
-    session.add_all(records_to_add)
-    session.commit()
-    logging.info(f"Committed {len(records_to_add)} records")
+    # Process the MARC XML file
+    map_xml(process_record, marc_file_path)
+
+    # Commit any remaining records
+    if records_to_add:
+        session.add_all(records_to_add)
+        session.commit()
+        logging.info(f"Committed {len(records_to_add)} records")
+    
+    session.close()

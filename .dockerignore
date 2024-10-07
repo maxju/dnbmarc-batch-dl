@@ -1,0 +1,5 @@
+data/
+notebooks/
+README.md
+python/.venv/
+python/__pycache__/
