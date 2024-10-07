@@ -9,7 +9,7 @@ Base = declarative_base()
 # Define the DNBRecord class
 class DNBRecord(Base):
     __tablename__ = 'dnb_records'
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4) # internal db uuid
+    id = Column(Integer, primary_key=True, autoincrement=True)
     idn = Column(String, unique=True, index=True)  # DNB IDN identifier
     title = Column(Text)
     title_additional = Column(Text)
