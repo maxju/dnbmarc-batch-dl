@@ -10,6 +10,8 @@ import time
 from sqlalchemy.exc import SQLAlchemyError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
+from PyPDF2 import PdfReader
+from io import BytesIO
 
 def pretty_print_time(duration):
             hours, remainder = divmod(duration.total_seconds(), 3600)
@@ -17,26 +19,38 @@ def pretty_print_time(duration):
             duration = f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
             return duration
 
-def download_and_save_file(id, url, download_dir, timeout=90): 
+def download_and_save_file(id, url, download_dir, timeout=90):
     try:
         start_time = datetime.now()
         # Request head
         response = requests.head(url, timeout=10, allow_redirects=True)
         file_size = int(response.headers.get("Content-Length", 0))
-        logging.info(f"{id}: Downloading file with size {file_size / (1024 * 1024):.2f} MB from {url}")
+        content_type = response.headers.get("Content-Type", "")
+        logging.info(f"{id}: Downloading {content_type} file with size {file_size / (1024 * 1024):.2f} MB from {url}")
 
         # Request file
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
+
+        # file handling
         file_extension = os.path.splitext(url)[1] or '.pdf'  # Default to .pdf if no extension
         file_name = f"{id}{file_extension}"
         file_path = os.path.join(download_dir, file_name)
-        
+
+
         # Write file
         with open(file_path, 'wb') as file:
             file.write(response.content)
 
-        return file_name
+        # Get number of pages
+        try:
+            num_pages = 0
+            pdf = PdfReader(BytesIO(response.content))
+            num_pages = len(pdf.pages)
+        except Exception as e:
+            logging.warning(f"Could not determine number of pages for {file_name}: {e}")
+
+        return file_name, file_size, content_type, file_extension, num_pages
 
     except requests.RequestException as e:
         logging.error(f"Error downloading file from {url}: {e}")
@@ -59,9 +73,13 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
 
         if url_dnb_archive:
             try:
-                file_name = download_and_save_file(record.idn, url_dnb_archive, download_dir, timeout=60)
+                file_name, file_size, content_type, file_extension, num_pages = download_and_save_file(record.idn, url_dnb_archive, download_dir, timeout=60)
                 if file_name:
                     record.path = file_name
+                    record.file_size = file_size
+                    record.content_type = content_type
+                    record.file_extension = file_extension
+                    record.num_pages = num_pages
                     session.commit()
                     logging.info(f"Successfully downloaded and updated record {record_id}")
                 else:
@@ -163,7 +181,7 @@ def get_records(Session, batch_size):
         records = Session().query(DNBRecord).filter(
             DNBRecord.url_dnb_archive.isnot(None),
             DNBRecord.path.is_(None)
-        ).offset(offset).limit(batch_size).all()
+        ).order_by(DNBRecord.year.desc()).offset(offset).limit(batch_size).all()
         
         if not records:
             break
