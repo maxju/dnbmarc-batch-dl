@@ -80,8 +80,22 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
                     record.content_type = content_type
                     record.file_extension = file_extension
                     record.num_pages = num_pages
-                    session.commit()
-                    logging.info(f"Successfully downloaded and updated record {record_id}")
+                    retries = 3
+                    for attempt in range(retries):
+                        try:
+                            session.commit()
+                            logging.info(f"Successfully downloaded and updated record {record_id}")
+                            break
+                        except SQLAlchemyError as e:
+                            if 'database is locked' in str(e).lower():
+                                if attempt < retries - 1:
+                                    logging.warning(f"Database is locked, retrying commit for record {record_id} (Attempt {attempt + 1})")
+                                    time.sleep(1)
+                                else:
+                                    logging.error(f"Failed to commit record {record_id} after {retries} attempts due to database lock.")
+                            else:
+                                logging.error(f"An error occurred while committing record {record_id}: {e}")
+                                break
                 else:
                     logging.warning(f"Failed to download file for record {record_id}")
             except requests.exceptions.Timeout:
@@ -199,4 +213,4 @@ if __name__ == "__main__":
     logging.info(f"Download directory: {download_dir}")
     logging.getLogger('').setLevel(logging.WARNING)
 
-    process_records(download_dir=download_dir, max_concurrent_downloads=12, batch_size=1000)
+    process_records(download_dir=download_dir, max_concurrent_downloads=6, batch_size=1000)
