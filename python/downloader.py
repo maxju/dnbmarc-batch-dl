@@ -10,93 +10,95 @@ import time
 from sqlalchemy.exc import SQLAlchemyError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
-from PyPDF2 import PdfReader
-from PyPDF2.errors import PdfReadError
-import io
+import fitz  # PyMuPDF
 import gc
-import mmap
 import tempfile
+import shutil
+from memory_profiler import profile
+
 
 def pretty_print_time(duration):
     hours, remainder = divmod(duration.total_seconds(), 3600)
     minutes, seconds = divmod(remainder, 60)
     duration = f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
     return duration
-
-def estimate_pdf_pages(file_path):
-    num_pages = 0
-    try:
-        with open(file_path, 'rb') as file:
-            with mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
-                pdf = PdfReader(mmapped_file)
-                while True:
-                    pdf.pages[num_pages]
-                    num_pages += 1
-    except IndexError:
-        # reached the end of readable pages
-        pass
-    except Exception as e:
-        # Log any unexpected errors
-        logging.warning(f"Unexpected error while estimating pages: {e}")
-    finally:
-        return num_pages
-
+@profile
 def get_pdf_pages(file_path):
     num_pages = 0
+    pdf = None
+
     try:
-        with open(file_path, 'rb') as file:
-            with mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
-                pdf = PdfReader(mmapped_file)
-                num_pages = len(pdf.pages)
-    except PdfReadError as e:
-        if "EOF marker not found" in str(e):
-            logging.warning(f"File appears to be corrupt: EOF marker not found. Attempting to estimate pages.")
-        else:
-            logging.warning(f"Could not read PDF: {e}. Attempting to estimate pages.")
-        # Attempt to estimate pages
-        num_pages = estimate_pdf_pages(file_path)
+        pdf = fitz.open(file_path)
+        num_pages = len(pdf)
     except Exception as e:
-        logging.warning(f"Unexpected error processing PDF: {e}")
+        logging.warning(f"Error processing PDF: {e}")
     finally:
+        if pdf:
+            pdf.close()
+            del pdf
         if num_pages == 0:
             logging.warning(f"Could not determine any readable pages")
         else:
             logging.info(f"Successfully read {num_pages} pages")
-        return num_pages
 
+        gc.collect()
+
+    return num_pages
+@profile
 def download_and_save_file(id, url, download_dir, timeout=90):
+    temp_file_path = None
     try:
         start_time = datetime.now()
-        # Request head
-        response = requests.head(url, timeout=timeout, allow_redirects=True)
-        file_size = int(response.headers.get("Content-Length", 0))
-        content_type = response.headers.get("Content-Type", "")
-        logging.info(f"{id}: Downloading {content_type} file with size {file_size / (1024 * 1024):.2f} MB from {url}")
 
         # Request file
         with requests.get(url, timeout=timeout, allow_redirects=True, stream=True) as response:
             response.raise_for_status()
 
+            file_size = int(response.headers.get("Content-Length", 0))
+            content_type = response.headers.get("Content-Type", "")
+            
+
             # file handling
             file_extension = os.path.splitext(url)[1] or '.pdf'  # Default to .pdf if no extension
             file_name = f"{id}{file_extension}"
-            file_path = os.path.join(download_dir, file_name)
+            final_file_path = os.path.join(download_dir, file_name)
 
-            # Write file in chunks
-            with open(file_path, 'wb') as file:
-                for chunk in response.iter_content(chunk_size=8192):
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, dir=download_dir, prefix=f"{id}_temp_", suffix=file_extension) as temp_file:
+                temp_file_path = temp_file.name
+                # Write file in chunks
+                for chunk in response.iter_content(chunk_size=8192): 
                     if chunk:
-                        file.write(chunk)
+                        temp_file.write(chunk)
+                temp_file.flush()
+                os.fsync(temp_file.fileno())  # Ensure all data is written to disk
 
-            # Get number of pages
-            num_pages = get_pdf_pages(file_path)
+        num_pages = get_pdf_pages(temp_file_path)
+
+        shutil.move(temp_file_path, final_file_path)
+
+        logging.info(f"{id}: Downloaded {content_type} file with size {file_size / (1024 * 1024):.2f} MB from {url} to {download_dir}/{file_name}")
 
         return file_name, file_size, content_type, file_extension, num_pages
 
     except requests.RequestException as e:
         logging.error(f"Error downloading file from {url}: {e}")
         return None
-
+    except Exception as e:
+        logging.error(f"Unexpected error while downloading and saving file: {e}")
+        return None
+    finally:
+        # Clean up temporary file if it exists
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except Exception as e:
+                logging.error(f"Error deleting temporary file {temp_file_path}: {e}")
+        
+        # Force garbage collection
+        del response
+        gc.collect()
+@profile
 def process_record(record_id, url_dnb_archive, download_dir, session_factory):
     """Worker function to process a single record."""
     session = session_factory()
@@ -226,7 +228,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                         last_progress_update = current_time
 
                         # Explicitly call garbage collection periodically
-                        if completed_records % 100 == 0:
+                        if completed_records % batch_size == 0:
                             gc.collect()
 
                 except Exception as e:
@@ -271,6 +273,6 @@ if __name__ == "__main__":
     download_dir = os.getenv('DOWNLOAD_DIR') or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data/files')
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Download directory: {download_dir}")
-    logging.getLogger('').setLevel(logging.WARNING)
+    logging.getLogger('').setLevel(logging.INFO)
 
-    process_records(download_dir=download_dir, max_concurrent_downloads=8, batch_size=64)
+    process_records(download_dir=download_dir, max_concurrent_downloads=1, batch_size=64)

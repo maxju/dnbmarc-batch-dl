@@ -1,4 +1,4 @@
 pandas
 requests
 sqlite3
-PyPDF2
+fitz
