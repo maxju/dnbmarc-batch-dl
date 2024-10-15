@@ -34,7 +34,8 @@ def estimate_pdf_pages(pdf_file):
     except Exception as e:
         # Log any unexpected errors
         logging.warning(f"Unexpected error while estimating pages: {e}")
-    return num_pages
+    finally:
+        return num_pages
 
 def get_pdf_pages(content):
     num_pages = 0
@@ -61,7 +62,7 @@ def get_pdf_pages(content):
         else:
             logging.info(f"Successfully read {num_pages} pages")
 
-    return num_pages
+        return num_pages
 
 def download_and_save_file(id, url, download_dir, timeout=90):
     try:
