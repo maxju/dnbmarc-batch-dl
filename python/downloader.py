@@ -72,11 +72,10 @@ def download_and_save_file(id, url, download_dir, timeout=90):
                 temp_file.flush()
                 os.fsync(temp_file.fileno())  # Ensure all data is written to disk
 
-        num_pages = get_pdf_pages(temp_file_path)
-
         shutil.move(temp_file_path, final_file_path)
-
         logging.info(f"{id}: Downloaded {content_type} file with size {file_size / (1024 * 1024):.2f} MB from {url} to {download_dir}/{file_name}")
+
+        num_pages = get_pdf_pages(final_file_path)
 
         return file_name, file_size, content_type, file_extension, num_pages
 
