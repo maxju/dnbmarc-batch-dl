@@ -5,7 +5,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
 import requests
 from model import engine, DNBRecord, Session as ModelSession
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 from sqlalchemy.exc import SQLAlchemyError
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -146,7 +146,7 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
         session.close()
 
 def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
-    start_time = datetime.now()
+    start_time = time.time()
 
     Session = scoped_session(ModelSession)
 
@@ -208,12 +208,24 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                     current_time = time.time()
                     if current_time - last_progress_update >= 1:
                         progress = (completed_records / records_with_url) * 100
-                        print(f"\rProgress: {progress:.2f}% ({completed_records}/{records_to_process})", end="", flush=True)
+
+                        # Calculate ETA
+                        elapsed_time = current_time - start_time
+                        records_left = records_to_process - completed_records
+                        if completed_records > 0:
+                            avg_time_per_record = elapsed_time / completed_records
+                            eta_seconds = avg_time_per_record * records_left
+                            eta = timedelta(seconds=int(eta_seconds))
+                        else:
+                            eta = "Unknown"
+
+                        print(f"\rProgress: {progress:.2f}% ({completed_records}/{records_to_process}) ETA: {eta} ", end="", flush=True)
                         last_progress_update = current_time
 
                         # Explicitly call garbage collection periodically
                         if completed_records % 100 == 0:
                             gc.collect()
+
                 except Exception as e:
                     logging.error(f"Exception in worker thread: {e}")
 
