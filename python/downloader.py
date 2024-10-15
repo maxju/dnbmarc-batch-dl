@@ -11,7 +11,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
 from PyPDF2 import PdfReader
-from io import BytesIO
+from PyPDF2.errors import PdfReadError
+import io
+import gc
 
 def pretty_print_time(duration):
             hours, remainder = divmod(duration.total_seconds(), 3600)
@@ -19,17 +21,59 @@ def pretty_print_time(duration):
             duration = f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
             return duration
 
+def estimate_pdf_pages(pdf_file):
+    pdf = PdfReader(pdf_file, strict=False)
+    num_pages = 0
+    try:
+        while True:
+            pdf.pages[num_pages]
+            num_pages += 1
+    except IndexError:
+        # reached the end of readable pages
+        pass
+    except Exception as e:
+        # Log any unexpected errors
+        logging.warning(f"Unexpected error while estimating pages: {e}")
+    return num_pages
+
+def get_pdf_pages(content):
+    num_pages = 0
+    try:
+        with io.BytesIO(content) as pdf_file:
+            pdf = PdfReader(pdf_file, strict=False)
+            num_pages = len(pdf.pages)
+
+    except PdfReadError as e:
+        if "EOF marker not found" in str(e):
+            logging.warning(f"File appears to be corrupt: EOF marker not found. Attempting to estimate pages.")
+        else:
+            logging.warning(f"Could not read PDF: {e}. Attempting to estimate pages.")
+        # Attempt to estimate pages
+        with io.BytesIO(content) as pdf_file:
+            num_pages = estimate_pdf_pages(pdf_file)
+
+    except Exception as e:
+        logging.warning(f"Unexpected error processing PDF: {e}")
+
+    finally:
+        if num_pages == 0:
+            logging.warning(f"Could not determine any readable pages")
+        else:
+            logging.info(f"Successfully read {num_pages} pages")
+
+    return num_pages
+
 def download_and_save_file(id, url, download_dir, timeout=90):
     try:
         start_time = datetime.now()
         # Request head
-        response = requests.head(url, timeout=10, allow_redirects=True)
+        response = requests.head(url, timeout=timeout, allow_redirects=True)
         file_size = int(response.headers.get("Content-Length", 0))
         content_type = response.headers.get("Content-Type", "")
         logging.info(f"{id}: Downloading {content_type} file with size {file_size / (1024 * 1024):.2f} MB from {url}")
 
         # Request file
-        response = requests.get(url, timeout=timeout)
+        response = requests.get(url, timeout=timeout, allow_redirects=True)
         response.raise_for_status()
 
         # file handling
@@ -43,12 +87,7 @@ def download_and_save_file(id, url, download_dir, timeout=90):
             file.write(response.content)
 
         # Get number of pages
-        try:
-            num_pages = 0
-            pdf = PdfReader(BytesIO(response.content))
-            num_pages = len(pdf.pages)
-        except Exception as e:
-            logging.warning(f"Could not determine number of pages for {file_name}: {e}")
+        num_pages = get_pdf_pages(response.content)
 
         return file_name, file_size, content_type, file_extension, num_pages
 
@@ -60,7 +99,6 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
     """Worker function to process a single record."""
     session = session_factory()
     try:
-
         # Check if the file is already downloaded
         record = session.get(DNBRecord, record_id)
         if not record:
@@ -71,46 +109,42 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
             logging.info(f"Skipping record {record_id}: File already downloaded")
             return
 
-        if url_dnb_archive:
-            try:
-                file_name, file_size, content_type, file_extension, num_pages = download_and_save_file(record.idn, url_dnb_archive, download_dir, timeout=60)
-                if file_name:
-                    record.path = file_name
-                    record.file_size = file_size
-                    record.content_type = content_type
-                    record.file_extension = file_extension
-                    record.num_pages = num_pages
-                    retries = 3
-                    for attempt in range(retries):
-                        try:
-                            session.commit()
-                            logging.info(f"Successfully downloaded and updated record {record_id}")
-                            break
-                        except SQLAlchemyError as e:
-                            if 'database is locked' in str(e).lower():
-                                if attempt < retries - 1:
-                                    logging.warning(f"Database is locked, retrying commit for record {record_id} (Attempt {attempt + 1})")
-                                    time.sleep(1)
-                                else:
-                                    logging.error(f"Failed to commit record {record_id} after {retries} attempts due to database lock.")
-                            else:
-                                logging.error(f"An error occurred while committing record {record_id}: {e}")
-                                break
-                else:
-                    logging.warning(f"Failed to download file for record {record_id}")
-            except requests.exceptions.Timeout:
-                logging.warning(f"Download for record {record_id} timed out after 60 seconds.")
-            except Exception as e:
-                logging.error(f"An error occurred while downloading file for record {record_id}: {e}")
-        else:
+        if not url_dnb_archive:
             logging.warning(f"No URN found for record {record_id}")
-    except SQLAlchemyError as e:
-        logging.error(f"Database error for record {record_id}: {e}")
-        session.rollback()
+            return
+
+        result = download_and_save_file(record.idn, url_dnb_archive, download_dir, timeout=60)
+        if not result:
+            return
+
+        file_name, file_size, content_type, file_extension, num_pages = result
+        record.path = file_name
+        record.file_size = file_size
+        record.content_type = content_type
+        record.file_extension = file_extension
+        record.num_pages = num_pages
+        retries = 3
+        for attempt in range(retries):
+            try:
+                session.commit()
+                logging.info(f"Successfully downloaded and updated record {record_id}")
+                break
+            except SQLAlchemyError as e:
+                if 'database is locked' in str(e).lower():
+                    if attempt < retries - 1:
+                        logging.warning(f"Database is locked, retrying commit for record {record_id} (Attempt {attempt + 1})")
+                        time.sleep(1)
+                    else:
+                        logging.error(f"Failed to commit record {record_id} after {retries} attempts due to database lock.")
+                else:
+                    logging.error(f"An error occurred while committing record {record_id}: {e}")
+                    break
+    except Exception as e:
+        logging.error(f"An error occurred while downloading file and writing to DB for record {record_id}: {e}")
     finally:
         session.close()
 
-def process_records(download_dir, max_concurrent_downloads=20, batch_size=1000):
+def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
     start_time = datetime.now()
 
     Session = scoped_session(ModelSession)
@@ -175,6 +209,10 @@ def process_records(download_dir, max_concurrent_downloads=20, batch_size=1000):
                         progress = (completed_records / records_with_url) * 100
                         print(f"\rProgress: {progress:.2f}% ({completed_records}/{records_to_process})", end="", flush=True)
                         last_progress_update = current_time
+
+                        # Explicitly call garbage collection periodically
+                        if completed_records % 100 == 0:
+                            gc.collect()
                 except Exception as e:
                     logging.error(f"Exception in worker thread: {e}")
 
@@ -184,6 +222,7 @@ def process_records(download_dir, max_concurrent_downloads=20, batch_size=1000):
         logging.error(f"Database error: {e}")
     finally:
         Session.remove()
+        gc.collect()
 
     total_time = datetime.now() - start_time
     print(f"Finished processing. Total time: {pretty_print_time(total_time)}")
@@ -192,10 +231,11 @@ def get_records(Session, batch_size):
     """Generator function to yield records in batches."""
     offset = 0
     while True:
-        records = Session().query(DNBRecord).filter(
-            DNBRecord.url_dnb_archive.isnot(None),
-            DNBRecord.path.is_(None)
-        ).order_by(DNBRecord.year.desc()).offset(offset).limit(batch_size).all()
+        with Session() as session:
+            records = session.query(DNBRecord).filter(
+                DNBRecord.url_dnb_archive.isnot(None),
+                DNBRecord.path.is_(None)
+            ).order_by(DNBRecord.year.desc()).offset(offset).limit(batch_size).all()
         
         if not records:
             break
@@ -204,6 +244,7 @@ def get_records(Session, batch_size):
             yield record
         
         offset += batch_size
+        gc.collect()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -213,4 +254,4 @@ if __name__ == "__main__":
     logging.info(f"Download directory: {download_dir}")
     logging.getLogger('').setLevel(logging.WARNING)
 
-    process_records(download_dir=download_dir, max_concurrent_downloads=6, batch_size=1000)
+    process_records(download_dir=download_dir, max_concurrent_downloads=6, batch_size=500)
