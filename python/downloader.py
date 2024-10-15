@@ -14,15 +14,13 @@ import fitz  # PyMuPDF
 import gc
 import tempfile
 import shutil
-from memory_profiler import profile
-
 
 def pretty_print_time(duration):
     hours, remainder = divmod(duration.total_seconds(), 3600)
     minutes, seconds = divmod(remainder, 60)
     duration = f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
     return duration
-@profile
+
 def get_pdf_pages(file_path):
     num_pages = 0
     pdf = None
@@ -44,7 +42,7 @@ def get_pdf_pages(file_path):
         gc.collect()
 
     return num_pages
-@profile
+
 def download_and_save_file(id, url, download_dir, timeout=90):
     temp_file_path = None
     try:
@@ -98,7 +96,7 @@ def download_and_save_file(id, url, download_dir, timeout=90):
         # Force garbage collection
         del response
         gc.collect()
-@profile
+
 def process_record(record_id, url_dnb_archive, download_dir, session_factory):
     """Worker function to process a single record."""
     session = session_factory()
