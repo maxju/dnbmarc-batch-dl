@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from sqlalchemy import create_engine, Column, String, Integer, Sequence, select, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
@@ -222,7 +223,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                         else:
                             eta = "Unknown"
 
-                        print(f"\rProgress: {progress:.2f}% ({completed_records}/{records_with_url}) ETA: {eta} ", end="", flush=True)
+                        print_to_log(f"\rProgress: {progress:.2f}% ({completed_records}/{records_with_url}) ETA: {eta} ")
                         last_progress_update = current_time
 
                         # Explicitly call garbage collection periodically
@@ -234,7 +235,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
 
                 del completed_future
 
-        print(f"\rFinished: ({records_to_process}/{records_to_process})")
+        print_to_log(f"\rFinished: ({records_to_process}/{records_to_process})")
 
     except SQLAlchemyError as e:
         logging.error(f"Database error: {e}")
@@ -243,7 +244,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
         gc.collect()
 
     total_time = datetime.now() - start_time
-    print(f"Finished processing. Total time: {pretty_print_time(total_time)}")
+    print_to_log(f"Finished processing. Total time: {pretty_print_time(total_time)}")
 
 def get_records(Session, batch_size):
     """Generator function to yield records in batches."""
@@ -264,6 +265,9 @@ def get_records(Session, batch_size):
         offset += batch_size
         session.expunge_all()
         gc.collect()
+
+def print_to_log(message):
+    print(message, file=sys.stderr, flush=True)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
