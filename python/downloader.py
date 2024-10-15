@@ -271,6 +271,6 @@ if __name__ == "__main__":
     download_dir = os.getenv('DOWNLOAD_DIR') or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data/files')
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Download directory: {download_dir}")
-    logging.getLogger('').setLevel(logging.INFO)
+    logging.getLogger('').setLevel(logging.WARNING)
 
-    process_records(download_dir=download_dir, max_concurrent_downloads=1, batch_size=64)
+    process_records(download_dir=download_dir, max_concurrent_downloads=4, batch_size=64)
