@@ -1,4 +1,4 @@
 requests
 sqlalchemy
 pymarc
-PyPDF2
+fitz
