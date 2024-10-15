@@ -231,6 +231,8 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                 except Exception as e:
                     logging.error(f"Exception in worker thread: {e}")
 
+                del completed_future
+
         print(f"\rFinished: ({records_to_process}/{records_to_process})")
 
     except SQLAlchemyError as e:
@@ -259,6 +261,7 @@ def get_records(Session, batch_size):
             yield record
         
         offset += batch_size
+        session.expunge_all()
         gc.collect()
 
 if __name__ == "__main__":
@@ -269,4 +272,4 @@ if __name__ == "__main__":
     logging.info(f"Download directory: {download_dir}")
     logging.getLogger('').setLevel(logging.WARNING)
 
-    process_records(download_dir=download_dir, max_concurrent_downloads=6, batch_size=500)
+    process_records(download_dir=download_dir, max_concurrent_downloads=8, batch_size=64)
