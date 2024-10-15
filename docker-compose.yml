@@ -7,6 +7,10 @@ services:
       target: downloader
     volumes:
       - ./data:/data
+      - ./python:/app
+    restart: unless-stopped
+    mem_limit: 2g
+    memswap_limit: 2g
     environment:
       - PYTHONUNBUFFERED=1
     command: python downloader.py
