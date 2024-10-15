@@ -14,20 +14,24 @@ from PyPDF2 import PdfReader
 from PyPDF2.errors import PdfReadError
 import io
 import gc
+import mmap
+import tempfile
 
 def pretty_print_time(duration):
-            hours, remainder = divmod(duration.total_seconds(), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            duration = f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
-            return duration
+    hours, remainder = divmod(duration.total_seconds(), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    duration = f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
+    return duration
 
-def estimate_pdf_pages(pdf_file):
-    pdf = PdfReader(pdf_file, strict=False)
+def estimate_pdf_pages(file_path):
     num_pages = 0
     try:
-        while True:
-            pdf.pages[num_pages]
-            num_pages += 1
+        with open(file_path, 'rb') as file:
+            with mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
+                pdf = PdfReader(mmapped_file)
+                while True:
+                    pdf.pages[num_pages]
+                    num_pages += 1
     except IndexError:
         # reached the end of readable pages
         pass
@@ -37,31 +41,27 @@ def estimate_pdf_pages(pdf_file):
     finally:
         return num_pages
 
-def get_pdf_pages(content):
+def get_pdf_pages(file_path):
     num_pages = 0
     try:
-        with io.BytesIO(content) as pdf_file:
-            pdf = PdfReader(pdf_file, strict=False)
-            num_pages = len(pdf.pages)
-
+        with open(file_path, 'rb') as file:
+            with mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
+                pdf = PdfReader(mmapped_file)
+                num_pages = len(pdf.pages)
     except PdfReadError as e:
         if "EOF marker not found" in str(e):
             logging.warning(f"File appears to be corrupt: EOF marker not found. Attempting to estimate pages.")
         else:
             logging.warning(f"Could not read PDF: {e}. Attempting to estimate pages.")
         # Attempt to estimate pages
-        with io.BytesIO(content) as pdf_file:
-            num_pages = estimate_pdf_pages(pdf_file)
-
+        num_pages = estimate_pdf_pages(file_path)
     except Exception as e:
         logging.warning(f"Unexpected error processing PDF: {e}")
-
     finally:
         if num_pages == 0:
             logging.warning(f"Could not determine any readable pages")
         else:
             logging.info(f"Successfully read {num_pages} pages")
-
         return num_pages
 
 def download_and_save_file(id, url, download_dir, timeout=90):
@@ -74,21 +74,22 @@ def download_and_save_file(id, url, download_dir, timeout=90):
         logging.info(f"{id}: Downloading {content_type} file with size {file_size / (1024 * 1024):.2f} MB from {url}")
 
         # Request file
-        response = requests.get(url, timeout=timeout, allow_redirects=True)
-        response.raise_for_status()
+        with requests.get(url, timeout=timeout, allow_redirects=True, stream=True) as response:
+            response.raise_for_status()
 
-        # file handling
-        file_extension = os.path.splitext(url)[1] or '.pdf'  # Default to .pdf if no extension
-        file_name = f"{id}{file_extension}"
-        file_path = os.path.join(download_dir, file_name)
+            # file handling
+            file_extension = os.path.splitext(url)[1] or '.pdf'  # Default to .pdf if no extension
+            file_name = f"{id}{file_extension}"
+            file_path = os.path.join(download_dir, file_name)
 
+            # Write file in chunks
+            with open(file_path, 'wb') as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        file.write(chunk)
 
-        # Write file
-        with open(file_path, 'wb') as file:
-            file.write(response.content)
-
-        # Get number of pages
-        num_pages = get_pdf_pages(response.content)
+            # Get number of pages
+            num_pages = get_pdf_pages(file_path)
 
         return file_name, file_size, content_type, file_extension, num_pages
 
