@@ -169,6 +169,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
         print(f"Processing {records_to_process} records...")
 
         completed_records = records_with_file
+        session_completed = 0
         last_progress_update = time.time()
 
         with ThreadPoolExecutor(max_workers=max_concurrent_downloads) as executor:
@@ -203,6 +204,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                 try:
                     completed_future.result()
                     completed_records += 1
+                    session_completed += 1
 
                     # Update progress every 1 second
                     current_time = time.time()
@@ -211,15 +213,15 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
 
                         # Calculate ETA
                         elapsed_time = current_time - start_time
-                        records_left = records_to_process - completed_records
-                        if completed_records > 0:
-                            avg_time_per_record = elapsed_time / completed_records
+                        records_left = records_with_url - completed_records
+                        if session_completed > 0:
+                            avg_time_per_record = elapsed_time / session_completed
                             eta_seconds = avg_time_per_record * records_left
                             eta = timedelta(seconds=int(eta_seconds))
                         else:
                             eta = "Unknown"
 
-                        print(f"\rProgress: {progress:.2f}% ({completed_records}/{records_to_process}) ETA: {eta} ", end="", flush=True)
+                        print(f"\rProgress: {progress:.2f}% ({completed_records}/{records_with_url}) ETA: {eta} ", end="", flush=True)
                         last_progress_update = current_time
 
                         # Explicitly call garbage collection periodically
@@ -229,7 +231,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                 except Exception as e:
                     logging.error(f"Exception in worker thread: {e}")
 
-        print(f"\rProgress: 100.00% ({records_to_process}/{records_to_process})")
+        print(f"\rFinished: ({records_to_process}/{records_to_process})")
 
     except SQLAlchemyError as e:
         logging.error(f"Database error: {e}")
