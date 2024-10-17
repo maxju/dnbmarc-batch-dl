@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from sqlalchemy import create_engine, Column, String, Integer, Sequence, select, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
@@ -14,15 +15,13 @@ import fitz  # PyMuPDF
 import gc
 import tempfile
 import shutil
-from memory_profiler import profile
-
 
 def pretty_print_time(duration):
     hours, remainder = divmod(duration.total_seconds(), 3600)
     minutes, seconds = divmod(remainder, 60)
     duration = f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
     return duration
-@profile
+
 def get_pdf_pages(file_path):
     num_pages = 0
     pdf = None
@@ -44,7 +43,7 @@ def get_pdf_pages(file_path):
         gc.collect()
 
     return num_pages
-@profile
+
 def download_and_save_file(id, url, download_dir, timeout=90):
     temp_file_path = None
     try:
@@ -73,11 +72,10 @@ def download_and_save_file(id, url, download_dir, timeout=90):
                 temp_file.flush()
                 os.fsync(temp_file.fileno())  # Ensure all data is written to disk
 
-        num_pages = get_pdf_pages(temp_file_path)
-
         shutil.move(temp_file_path, final_file_path)
-
         logging.info(f"{id}: Downloaded {content_type} file with size {file_size / (1024 * 1024):.2f} MB from {url} to {download_dir}/{file_name}")
+
+        num_pages = get_pdf_pages(final_file_path)
 
         return file_name, file_size, content_type, file_extension, num_pages
 
@@ -98,7 +96,7 @@ def download_and_save_file(id, url, download_dir, timeout=90):
         # Force garbage collection
         del response
         gc.collect()
-@profile
+
 def process_record(record_id, url_dnb_archive, download_dir, session_factory):
     """Worker function to process a single record."""
     session = session_factory()
@@ -224,7 +222,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                         else:
                             eta = "Unknown"
 
-                        print(f"\rProgress: {progress:.2f}% ({completed_records}/{records_with_url}) ETA: {eta} ", end="", flush=True)
+                        print_progress(f"Progress: {progress:.2f}% ({completed_records}/{records_with_url}) ETA: {eta}", end='')
                         last_progress_update = current_time
 
                         # Explicitly call garbage collection periodically
@@ -236,7 +234,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
 
                 del completed_future
 
-        print(f"\rFinished: ({records_to_process}/{records_to_process})")
+        print_progress(f"\rFinished: ({records_to_process}/{records_to_process})")
 
     except SQLAlchemyError as e:
         logging.error(f"Database error: {e}")
@@ -245,7 +243,7 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
         gc.collect()
 
     total_time = datetime.now() - start_time
-    print(f"Finished processing. Total time: {pretty_print_time(total_time)}")
+    print_progress(f"Finished processing. Total time: {pretty_print_time(total_time)}")
 
 def get_records(Session, batch_size):
     """Generator function to yield records in batches."""
@@ -267,12 +265,15 @@ def get_records(Session, batch_size):
         session.expunge_all()
         gc.collect()
 
+def print_progress(message, end='\n'):
+    print(f"\r{message}", end=end, file=sys.stderr, flush=True)
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     download_dir = os.getenv('DOWNLOAD_DIR') or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data/files')
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Download directory: {download_dir}")
-    logging.getLogger('').setLevel(logging.INFO)
+    logging.getLogger('').setLevel(logging.WARNING)
 
-    process_records(download_dir=download_dir, max_concurrent_downloads=1, batch_size=64)
+    process_records(download_dir=download_dir, max_concurrent_downloads=4, batch_size=64)
