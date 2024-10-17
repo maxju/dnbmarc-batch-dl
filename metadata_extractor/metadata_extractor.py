@@ -7,7 +7,9 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
-from model import DNBRecord, Session
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.pg_model import get_engine, init_db, get_session, DNBRecord
 
 def safe_extract(record, field_tag, subfield_code, ind1=None, ind2=None):
     """Safely extract a subfield from a MARC record, optionally matching indicators."""
@@ -103,7 +105,9 @@ def process_record(record):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    session = Session()
+    engine = get_engine()
+    init_db(engine)  # Create tables if they don't exist
+    session = get_session(engine)
 
     # Initialize variables
     records_to_add = []
@@ -111,7 +115,7 @@ if __name__ == "__main__":
     records = 0
 
     # Construct the path to the MARC XML file
-    data_dir = os.getenv('DATA_DIR') or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '../data')
+    data_dir = os.getenv('DATA_DIR') or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
     marc_file = 'dnb-all_online_hochschulschriften_frei_dnbmarc_20240327mrc.xml'
     marc_file_path = os.path.join(data_dir, marc_file)
 

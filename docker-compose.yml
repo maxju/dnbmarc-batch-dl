@@ -1,5 +1,4 @@
-version: '3.8'
-
+---
 services:
   downloader:
     build:
@@ -14,3 +13,17 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     command: python downloader.py
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    mem_limit: 2g
+    memswap_limit: 2g
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=dnb
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=dnb_records
+    volumes:
+      - ./data/pg_data:/var/lib/postgresql/data

@@ -5,3 +5,4 @@ data/
 __pycache__/
 downloader/dnb_records.db
 .vscode/
+.env

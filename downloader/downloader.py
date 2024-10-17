@@ -5,7 +5,6 @@ from sqlalchemy import create_engine, Column, String, Integer, Sequence, select,
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
 import requests
-from model import engine, DNBRecord, Session as ModelSession
 from datetime import datetime, timedelta
 import time
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,11 +15,18 @@ import gc
 import tempfile
 import shutil
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.pg_model import get_engine, init_db, get_session, DNBRecord
+
+
+# Create a scoped session factory
+engine = get_engine() # Create tables if they don't exist
+SessionFactory = scoped_session(sessionmaker(bind=engine))
+
 def pretty_print_time(duration):
     hours, remainder = divmod(duration.total_seconds(), 3600)
     minutes, seconds = divmod(remainder, 60)
-    duration = f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
-    return duration
+    return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
 
 def get_pdf_pages(file_path):
     num_pages = 0
@@ -99,7 +105,8 @@ def download_and_save_file(id, url, download_dir, timeout=90):
 
 def process_record(record_id, url_dnb_archive, download_dir, session_factory):
     """Worker function to process a single record."""
-    session = session_factory()
+
+    session = SessionFactory()
     try:
         # Check if the file is already downloaded
         record = session.get(DNBRecord, record_id)
@@ -147,21 +154,19 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
         session.close()
 
 def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
-    start_time = time.time()
-
-    Session = scoped_session(ModelSession)
-
+    start_time = datetime.now()
     try:
-        records_with_url = Session().query(func.count(DNBRecord.id)).filter(
+        session = SessionFactory()
+        records_with_url = session.query(func.count(DNBRecord.id)).filter(
             DNBRecord.url_dnb_archive.isnot(None)
         ).scalar()
 
-        records_with_file = Session().query(func.count(DNBRecord.id)).filter(
+        records_with_file = session.query(func.count(DNBRecord.id)).filter(
             DNBRecord.url_dnb_archive.isnot(None),
             DNBRecord.path.isnot(None)
         ).scalar()
 
-        records_to_process = Session().query(func.count(DNBRecord.id)).filter(
+        records_to_process = session.query(func.count(DNBRecord.id)).filter(
             DNBRecord.url_dnb_archive.isnot(None),
             DNBRecord.path.is_(None)
         ).scalar()
@@ -171,11 +176,11 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
 
         completed_records = records_with_file
         session_completed = 0
-        last_progress_update = time.time()
+        last_progress_update = datetime.now()
 
         with ThreadPoolExecutor(max_workers=max_concurrent_downloads) as executor:
             active_futures = deque()
-            records_generator = get_records(Session, batch_size)
+            records_generator = get_records(SessionFactory, batch_size)
 
             while True:
                 # Start new futures if we have less than max_concurrent_downloads
@@ -187,7 +192,6 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                             record_id=record.id,
                             url_dnb_archive=record.url_dnb_archive,
                             download_dir=download_dir,
-                            session_factory=Session
                         )
                         active_futures.append(future)
                     except StopIteration:
@@ -208,12 +212,12 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                     session_completed += 1
 
                     # Update progress every 1 second
-                    current_time = time.time()
-                    if current_time - last_progress_update >= 1:
+                    current_time = datetime.now()
+                    if current_time - last_progress_update >= timedelta(seconds=1):
                         progress = (completed_records / records_with_url) * 100
 
                         # Calculate ETA
-                        elapsed_time = current_time - start_time
+                        elapsed_time = (current_time - start_time).total_seconds()
                         records_left = records_with_url - completed_records
                         if session_completed > 0:
                             avg_time_per_record = elapsed_time / session_completed
@@ -239,30 +243,33 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
     except SQLAlchemyError as e:
         logging.error(f"Database error: {e}")
     finally:
-        Session.remove()
+        SessionFactory.remove()
         gc.collect()
 
     total_time = datetime.now() - start_time
     print_progress(f"Finished processing. Total time: {pretty_print_time(total_time)}")
 
-def get_records(Session, batch_size):
+def get_records(SessionFactory, batch_size):
     """Generator function to yield records in batches."""
     offset = 0
     while True:
-        with Session() as session:
+        session = SessionFactory()
+        try:
             records = session.query(DNBRecord).filter(
                 DNBRecord.url_dnb_archive.isnot(None),
                 DNBRecord.path.is_(None)
             ).order_by(DNBRecord.year.desc()).offset(offset).limit(batch_size).all()
         
-        if not records:
-            break
+            if not records:
+                break
         
-        for record in records:
-            yield record
+            for record in records:
+                yield record
+                
         
-        offset += batch_size
-        session.expunge_all()
+            offset += batch_size
+        finally:
+            session.close()
         gc.collect()
 
 def print_progress(message, end='\n'):
@@ -275,5 +282,8 @@ if __name__ == "__main__":
     os.makedirs(download_dir, exist_ok=True)
     logging.info(f"Download directory: {download_dir}")
     logging.getLogger('').setLevel(logging.WARNING)
+
+    init_db(engine)  # Create tables if they don't exist
+
 
     process_records(download_dir=download_dir, max_concurrent_downloads=4, batch_size=64)
