@@ -16,6 +16,7 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 TOKEN_FILE = "token.pickle"
 CREDENTIALS_FILE = "client_id.json"
 
+# TODO: Ensure that the CREDENTIALS_FILE (client_id.json) is present in the same directory as this script
 
 def get_credentials() -> Optional[Credentials]:
     """
@@ -124,6 +125,9 @@ def upload_file(service, file_path: str, parent_id: str, skip_existing: bool = F
         file_path: Local path of the file to upload.
         parent_id: ID of the parent folder in Google Drive.
         skip_existing: If True, skip upload if file already exists in Drive.
+    
+    Returns:
+        Tuple of (file_id: str, filename: str) of the uploaded file
     """
     file_name = os.path.basename(file_path)
 
@@ -131,7 +135,7 @@ def upload_file(service, file_path: str, parent_id: str, skip_existing: bool = F
         existing_files = list_folder_contents(service, parent_id)
         if any(file["name"] == file_name for file in existing_files):
             print(f"Skipping existing file: {file_name}")
-            return
+            return None, None
 
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type is None:
@@ -139,8 +143,9 @@ def upload_file(service, file_path: str, parent_id: str, skip_existing: bool = F
 
     file_metadata = {"name": file_name, "parents": [parent_id]}
     media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
-    service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+    file = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
     print(f"Uploaded file: {file_name}")
+    return file.get("id"), file_name
 
 
 def download_folder_recursive(
