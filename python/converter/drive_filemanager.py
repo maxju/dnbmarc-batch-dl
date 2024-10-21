@@ -215,3 +215,23 @@ def upload_folder_recursive(
             upload_folder_recursive(service, item_path, folder_id, skip_existing)
         else:
             upload_file(service, item_path, parent_id, skip_existing)
+
+
+if __name__ == "__main__":
+    # Set up the Drive service
+    service = get_drive_service()
+    
+    # File ID to download
+    file_id = "1TCJH-jgmf2wgqOlX1qIDlJm1HyeBMb-G"
+    
+    # Get file metadata to retrieve the file name
+    file_metadata = service.files().get(fileId=file_id, fields="name").execute()
+    file_name = file_metadata.get("name", "downloaded_file")
+    
+    # Set the destination directory (current directory in this case)
+    destination = "."
+    
+    # Download the file
+    download_file(service, file_id, file_name, destination)
+    
+    print(f"File '{file_name}' has been downloaded successfully.")

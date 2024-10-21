@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, Text
+from sqlalchemy import create_engine, Column, String, Integer, Text, Date
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
@@ -43,6 +43,11 @@ class DNBRecord(Base):
     selection = Column(Integer, default=0)
     converted_file = Column(String)
     drive_file_id = Column(String)
+    conversion_lock = Column(Date)
+    abstract_num = Column(Integer)
+    summary_num = Column(Integer)
+    abstract_pos = Column(Integer)
+    summary_pos = Column(Integer)
 
 def get_engine(database_url=None):
     if database_url is None:
@@ -63,4 +68,5 @@ def get_session(engine):
 # Only create tables if this file is run directly
 if __name__ == "__main__":
     engine = get_engine()
+    print(f"Creating tables in PostgreSQL database")
     init_db(engine)

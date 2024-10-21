@@ -1,2 +1,3 @@
 pymarc
 sqlalchemy
+psycopg2-binary
