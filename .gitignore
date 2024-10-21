@@ -1,8 +1,9 @@
 .DS_Store
 data/
 .venv/
-.db
+*.db
 __pycache__/
 downloader/dnb_records.db
 .vscode/
 .env
+*.pickle
