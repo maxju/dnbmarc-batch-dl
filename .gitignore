@@ -6,4 +6,5 @@ __pycache__/
 downloader/dnb_records.db
 .vscode/
 .env
+client_id.json
 *.pickle
