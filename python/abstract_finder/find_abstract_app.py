@@ -29,7 +29,7 @@ def process_batch(batch):
                 logger.info(f"Processing file: {file_path}")
 
                 # Process 'abstract'
-                result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), record.path, 'abstract'], 
+                result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), file_path, 'abstract'], 
                                         capture_output=True, text=True)
                 output = result.stdout.strip().split(',')
                 logger.info(f"Output: {output}")
@@ -39,11 +39,11 @@ def process_batch(batch):
                     record.abstract_pos = float(abstract_position)
                     logger.info(f"Updated abstract info: count={abstract_count}, position={abstract_position}")
                 else:
-                    logger.warning(f"Unexpected output format for 'abstract' in file {record.path}")
+                    logger.warning(f"Unexpected output format for 'abstract' in file {file_path}")
 
                 # Process 'summary'
                 # Start of Selection
-                result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), record.path, 'summary'], 
+                result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), file_path, 'summary'], 
                                         capture_output=True, text=True)
                 output = result.stdout.strip().split(',')
                 logger.info(f"Output: {output}")
@@ -53,7 +53,7 @@ def process_batch(batch):
                     record.summary_pos = float(summary_position)
                     logger.info(f"Updated summary info: count={summary_count}, position={summary_position}")
                 else:
-                    logger.warning(f"Unexpected output format for 'summary' in file {record.path}")
+                    logger.warning(f"Unexpected output format for 'summary' in file {file_path}")
             else:
                 logger.error(f"No path found for record with ID: {record.id}")
 
