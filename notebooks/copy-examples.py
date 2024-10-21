@@ -82,7 +82,7 @@ def select_diverse_pdfs(cursor, main_category, sub_category, ddc_number):
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Connect to the SQLite database
-conn = sqlite3.connect("../downloader/dnb_records.db")
+conn = sqlite3.connect("../data/dnb_records.db")
 cursor = conn.cursor()
 
 # Load DDC basic data
