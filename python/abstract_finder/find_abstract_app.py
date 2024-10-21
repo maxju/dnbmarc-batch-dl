@@ -41,21 +41,21 @@ def process_batch(batch):
                 else:
                     logger.warning(f"Unexpected output format for 'abstract' in file {file_path}")
 
-                # Process 'summary'
-                # Start of Selection
-                result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), file_path, 'summary'], 
-                                        capture_output=True, text=True)
-                output = result.stdout.strip().split(',')
-                logger.info(f"Output: {output}")
-                if len(output) == 3:
-                    filename, summary_count, summary_position = output
-                    record.summary_num = int(summary_count)
-                    record.summary_pos = float(summary_position)
-                    logger.info(f"Updated summary info: count={summary_count}, position={summary_position}")
-                else:
-                    logger.warning(f"Unexpected output format for 'summary' in file {file_path}")
-            else:
-                logger.error(f"No path found for record with ID: {record.id}")
+            #     # Process 'summary'
+            #     # Start of Selection
+            #     result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), file_path, 'summary'], 
+            #                             capture_output=True, text=True)
+            #     output = result.stdout.strip().split(',')
+            #     logger.info(f"Output: {output}")
+            #     if len(output) == 3:
+            #         filename, summary_count, summary_position = output
+            #         record.summary_num = int(summary_count)
+            #         record.summary_pos = float(summary_position)
+            #         logger.info(f"Updated summary info: count={summary_count}, position={summary_position}")
+            #     else:
+            #         logger.warning(f"Unexpected output format for 'summary' in file {file_path}")
+            # else:
+            #     logger.error(f"No path found for record with ID: {record.id}")
 
         session.commit()
         logger.info(f"Committed changes for batch of {len(batch)} records")
