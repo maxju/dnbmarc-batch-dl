@@ -1,8 +1,10 @@
 .DS_Store
-data/
+data/*
+!data/ddc/
 .venv/
 .db
 __pycache__/
 downloader/dnb_records.db
 .vscode/
 .env
+
