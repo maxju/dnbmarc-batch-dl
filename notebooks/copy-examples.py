@@ -112,7 +112,7 @@ for row in results:
 for main_category, sub_categories in sorted(
     grouped_results.items(), key=lambda x: x[0].split()[0]
 ):
-    # logging.info(f"\n{main_category}")
+    logging.info(f"\n{main_category}")
 
     main_folder = sanitize_filename(
         f"{main_category.split()[0]}_{main_category.split()[1]}"
@@ -122,7 +122,7 @@ for main_category, sub_categories in sorted(
         sub_categories.items(),
         key=lambda x: x[0].split()[0] if x[0].split()[0].isdigit() else "999",
     ):
-        # logging.info(f"  {sub_category}")
+        logging.info(f"  {sub_category}")
 
         sub_folder = sanitize_filename(
             f"{sub_category.split()[0]}_{' '.join(sub_category.split()[1:])}"
@@ -131,12 +131,12 @@ for main_category, sub_categories in sorted(
 
         # Uncomment the following lines when you want to create the directories
         os.makedirs(target_folder, exist_ok=True)
-        # logging.info(f"Created folder: {target_folder}")
+        logging.info(f"Created folder: {target_folder}")
 
         for pdf_path, year in pdfs:
             original_filename = os.path.basename(pdf_path)
-            # new_filename = f"{year}_{original_filename}"
-            # logging.info(f"    {new_filename}")
+            new_filename = f"{year}_{original_filename}"
+            logging.info(f"    {new_filename}")
             # Copy the file
             source_path = os.path.join(download_dir, pdf_path)
             shutil.copy2(source_path, os.path.join(target_folder, new_filename))
