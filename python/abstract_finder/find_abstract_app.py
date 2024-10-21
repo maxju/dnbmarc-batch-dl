@@ -32,6 +32,7 @@ def process_batch(batch):
                 result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), record.path, 'abstract'], 
                                         capture_output=True, text=True)
                 output = result.stdout.strip().split(',')
+                logger.info(f"Output: {output}")
                 if len(output) == 3:
                     filename, abstract_count, abstract_position = output
                     record.abstract_num = int(abstract_count)
@@ -45,6 +46,7 @@ def process_batch(batch):
                 result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), record.path, 'summary'], 
                                         capture_output=True, text=True)
                 output = result.stdout.strip().split(',')
+                logger.info(f"Output: {output}")
                 if len(output) == 3:
                     filename, summary_count, summary_position = output
                     record.summary_num = int(summary_count)

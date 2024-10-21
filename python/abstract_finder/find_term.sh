@@ -34,3 +34,4 @@ if [ -n "$first_occurrence" ]; then
 else
     echo "$pdf_file,0,0"
 fi
+
