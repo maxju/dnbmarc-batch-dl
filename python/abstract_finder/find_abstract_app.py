@@ -68,7 +68,7 @@ def process_batch(batch):
 def main():
     session = Session()
     try:
-        total_records = session.query(DNBRecord).count()
+        total_records = session.query(DNBRecord).filter(DNBRecord.abstract_num.is_(None)).count()
         logger.info(f"Total records to process: {total_records}")
 
         batch_size = 100

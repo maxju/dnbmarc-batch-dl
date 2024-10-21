@@ -32,6 +32,6 @@ if [ -n "$first_occurrence" ]; then
     
     echo "$pdf_file,$count,$position"
 else
-    echo "not found"
+    echo "$pdf_file,0,0"
 fi
 
