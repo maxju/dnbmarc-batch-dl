@@ -29,7 +29,7 @@ def process_batch(batch):
                 logger.info(f"Processing file: {file_path}")
 
                 # Process 'abstract'
-                result = subprocess.run(['./utils/find_abstract.sh', record.path], 
+                result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), record.path, 'abstract'], 
                                         capture_output=True, text=True)
                 output = result.stdout.strip().split(',')
                 if len(output) == 3:
@@ -41,7 +41,8 @@ def process_batch(batch):
                     logger.warning(f"Unexpected output format for 'abstract' in file {record.path}")
 
                 # Process 'summary'
-                result = subprocess.run(['./utils/find_term.sh', record.path, 'summary'], 
+                # Start of Selection
+                result = subprocess.run([os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), record.path, 'summary'], 
                                         capture_output=True, text=True)
                 output = result.stdout.strip().split(',')
                 if len(output) == 3:
