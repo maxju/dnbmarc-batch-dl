@@ -13,6 +13,10 @@ import torch_xla
 import torch_xla.core.xla_model as xm
 from dotenv import load_dotenv
 from transformers import NougatProcessor, VisionEncoderDecoderModel
+from nougat.dataset.rasterize import rasterize_paper
+from nougat.dataset.dataset import ImageDataset
+from torch.utils.data import DataLoader
+
 
 load_dotenv()
 # Configure logging
@@ -56,7 +60,7 @@ def download_pdf(pdf_url: str, pdf_id: str) -> Optional[str]:
 
 def convert_pdf_to_mmd(pdf_path: str) -> Optional[str]:
     """
-    Convert a PDF file to Markdown using Nougat.
+    Convert a PDF file to Markdown using the Nougat model.
     
     Args:
         pdf_path: Local path of the PDF file
@@ -68,13 +72,31 @@ def convert_pdf_to_mmd(pdf_path: str) -> Optional[str]:
         pdf_path = Path(pdf_path)
         mmd_path = pdf_path.with_suffix('.mmd')
 
-        with torch.no_grad():
-            pixel_values = processor(images=pdf_path, return_tensors="pt").pixel_values.to(device) 
-            generated_ids = model.generate(pixel_values)
-            output = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-            output = processor.post_process_generation(output, fix_markdown=False)
+        # Convert PDF to a list of images
+        images = rasterize_paper(pdf_path)
+
+        # Create an ImageDataset and DataLoader
+        dataset = ImageDataset(
+            images,
+            processor=processor,
+            device=device,
+        )
+        dataloader = DataLoader(dataset, batch_size=1)
+
+        # Process each batch of images and generate markdown
+        markdown_pages = []
+        for batch in dataloader:
+            with torch.no_grad():
+                pixel_values = batch["pixel_values"].to(device)
+                generated_ids = model.generate(pixel_values)
+                output = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+                markdown_pages.append(output)
+
+        # Join the markdown pages into a single string
+        markdown_output = "\n\n".join(markdown_pages)
+
         with open(mmd_path, 'w', encoding='utf-8') as f:
-            f.write(output)
+            f.write(markdown_output)
 
         logging.info(f"Successfully converted {pdf_path} to {mmd_path}")
         return str(mmd_path)
