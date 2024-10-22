@@ -25,7 +25,6 @@ BATCH_SIZE = 100  # Number of records to process in each batch
 
 # Initialize Nougat model
 device = xm.xla_device()
-checkpoint = get_checkpoint(None)
 model = NougatModel.from_pretrained("facebook/nougat-base").to(device)
 model.eval()
 
