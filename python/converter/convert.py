@@ -14,7 +14,7 @@ import torch_xla.core.xla_model as xm
 from dotenv import load_dotenv
 from transformers import NougatProcessor, VisionEncoderDecoderModel
 from nougat.dataset.rasterize import rasterize_paper
-from nougat.dataset.dataset import ImageDataset
+from nougat.utils.dataset import ImageDataset
 from torch.utils.data import DataLoader
 
 
