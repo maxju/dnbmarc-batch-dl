@@ -72,22 +72,28 @@ def process_batch(batch):
 def main():
     session = get_session(engine)
     try:
-        total_records = session.query(DNBRecord).count()
-        logger.info(f"Total records to process: {total_records}")
+        # Count only records that need processing
+        total_records = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).count()
+        print(f"Total records to process: {total_records}")
 
         batch_size = 1000
         processed_records = 0
 
         with tqdm(total=total_records, desc="Overall progress", unit="record") as pbar:
             for offset in range(0, total_records, batch_size):
-                batch = session.query(DNBRecord).offset(offset).limit(batch_size).all()
-                logger.info(f"Processing batch of {len(batch)} records (offset: {offset})")
+                # Query only records that need processing
+                batch = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).offset(offset).limit(batch_size).all()
+                
+                if not batch:
+                    break  # No more records to process
+
+                print(f"Processing batch of {len(batch)} records (offset: {offset})")
                 process_batch(batch)
                 
                 processed_records += len(batch)
                 pbar.update(len(batch))
                 
-                # Log overall progress every 5% or every 10,000 records, whichever comes first
+                # Log overall progress every 5% or every 1,000 records, whichever comes first
                 if processed_records % max(total_records // 20, 1000) == 0 or processed_records == total_records:
                     progress_percentage = (processed_records / total_records) * 100
                     print(f"Overall progress: {processed_records}/{total_records} records processed ({progress_percentage:.1f}%)")
