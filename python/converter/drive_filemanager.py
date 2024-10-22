@@ -1,43 +1,33 @@
 from __future__ import print_function
 import os
-import pickle
 import logging
 import mimetypes
 from typing import Optional
+import random
+import string
+import tempfile
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
-# If modifying these scopes, delete the file token.pickle.
+# If modifying these scopes, update the scope in your Google Cloud Console
 SCOPES = ["https://www.googleapis.com/auth/drive"]
-TOKEN_FILE = "token.pickle"
-CREDENTIALS_FILE = "client_id.json"
+SERVICE_ACCOUNT_FILE = "google-service-account.json"
 
-# TODO: Ensure that the CREDENTIALS_FILE (client_id.json) is present in the same directory as this script
 
-def get_credentials() -> Optional[Credentials]:
+def get_credentials() -> Optional[service_account.Credentials]:
     """
-    Retrieve or create Google Drive API credentials.
-    
-    This function checks for existing credentials, refreshes them if expired,
-    or creates new ones through the OAuth2 flow if necessary.
+    Retrieve Google Drive API credentials from the service account file.
     """
-    creds = None
-    if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, "rb") as token:
-            creds = pickle.load(token)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(TOKEN_FILE, "wb") as token:
-            pickle.dump(creds, token)
-    return creds
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, scopes=SCOPES
+        )
+        return creds
+    except Exception as e:
+        logging.error(f"Error loading service account credentials: {e}")
+        return None
 
 
 def get_drive_service():
@@ -45,17 +35,19 @@ def get_drive_service():
     Create and return an authenticated Google Drive service object.
     """
     creds = get_credentials()
+    if not creds:
+        raise ValueError("Failed to obtain valid credentials")
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
 def list_folder_contents(service, folder_id: str):
     """
     List the contents (files and folders) of a specific Google Drive folder.
-    
+
     Args:
         service: Authenticated Google Drive service object.
         folder_id: ID of the folder to list contents from.
-    
+
     Returns:
         A list of dictionaries containing file/folder information.
     """
@@ -73,7 +65,7 @@ def download_file(
 ):
     """
     Download a file from Google Drive to a local destination.
-    
+
     Args:
         service: Authenticated Google Drive service object.
         file_id: ID of the file to download.
@@ -98,12 +90,12 @@ def download_file(
 def create_folder(service, folder_name: str, parent_id: str) -> str:
     """
     Create a new folder in Google Drive.
-    
+
     Args:
         service: Authenticated Google Drive service object.
         folder_name: Name of the new folder.
         parent_id: ID of the parent folder.
-    
+
     Returns:
         The ID of the newly created folder.
     """
@@ -119,13 +111,13 @@ def create_folder(service, folder_name: str, parent_id: str) -> str:
 def upload_file(service, file_path: str, parent_id: str, skip_existing: bool = False):
     """
     Upload a file to Google Drive.
-    
+
     Args:
         service: Authenticated Google Drive service object.
         file_path: Local path of the file to upload.
         parent_id: ID of the parent folder in Google Drive.
         skip_existing: If True, skip upload if file already exists in Drive.
-    
+
     Returns:
         Tuple of (file_id: str, filename: str) of the uploaded file
     """
@@ -143,7 +135,11 @@ def upload_file(service, file_path: str, parent_id: str, skip_existing: bool = F
 
     file_metadata = {"name": file_name, "parents": [parent_id]}
     media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
-    file = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+    file = (
+        service.files()
+        .create(body=file_metadata, media_body=media, fields="id")
+        .execute()
+    )
     print(f"Uploaded file: {file_name}")
     return file.get("id"), file_name
 
@@ -153,7 +149,7 @@ def download_folder_recursive(
 ):
     """
     Recursively download a folder and its contents from Google Drive.
-    
+
     Args:
         service: Authenticated Google Drive service object.
         folder_id: ID of the folder to download.
@@ -185,7 +181,7 @@ def upload_folder_recursive(
 ):
     """
     Recursively upload a local folder and its contents to Google Drive.
-    
+
     Args:
         service: Authenticated Google Drive service object.
         local_folder: Path to the local folder to upload.
@@ -220,18 +216,39 @@ def upload_folder_recursive(
 if __name__ == "__main__":
     # Set up the Drive service
     service = get_drive_service()
-    
-    # File ID to download
-    file_id = "1TCJH-jgmf2wgqOlX1qIDlJm1HyeBMb-G"
-    
-    # Get file metadata to retrieve the file name
-    file_metadata = service.files().get(fileId=file_id, fields="name").execute()
-    file_name = file_metadata.get("name", "downloaded_file")
-    
-    # Set the destination directory (current directory in this case)
-    destination = "."
-    
-    # Download the file
-    download_file(service, file_id, file_name, destination)
-    
-    print(f"File '{file_name}' has been downloaded successfully.")
+
+    # Main directory ID
+    main_dir_id = "1wl9M0ZYHnZSK_IXcQDLheeyY1v9ldTAZ" # DNB Directory
+
+    # Create a random suffix for the folder name
+    random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    folder_name = f"sample_folder_{random_suffix}"
+
+    # Create the folder in Google Drive
+    folder_id = create_folder(service, folder_name, main_dir_id)
+    print(f"Created folder: {folder_name}")
+
+    # Create a temporary file with random content
+    random_filename = ''.join(random.choices(string.ascii_lowercase, k=8)) + ".txt"
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as temp_file:
+        temp_file.write(f"This is a sample file created at {tempfile.gettempdir()}")
+        temp_file_path = temp_file.name
+
+    # Upload the temporary file to the newly created folder
+    file_id, file_name = upload_file(service, temp_file_path, folder_id, skip_existing=False)
+    print(f"Uploaded file: {file_name}")
+
+    # Clean up the temporary file
+    os.remove(temp_file_path)
+
+    print(f"Sample folder '{folder_name}' with a random text file has been created and uploaded successfully.")
+
+    # Create a download folder
+    download_folder = os.path.join(os.getcwd(), "download_folder")
+    os.makedirs(download_folder, exist_ok=True)
+
+    # Download the random file
+    download_file(service, file_id, file_name, download_folder, skip_existing=False)
+    print(f"Downloaded file: {file_name} to {download_folder}")
+
+    print(f"Sample folder '{folder_name}' with a random text file has been created, uploaded, and downloaded successfully.")
