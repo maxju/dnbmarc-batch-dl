@@ -69,8 +69,10 @@ def convert_pdf_to_mmd(pdf_path: str) -> Optional[str]:
         mmd_path = pdf_path.with_suffix('.mmd')
 
         with torch.no_grad():
-            output = model.inference(pdf_path)
-
+            pixel_values = processor(images=pdf_path, return_tensors="pt").pixel_values.to(device) 
+            generated_ids = model.generate(pixel_values)
+            output = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+            output = processor.post_process_generation(output, fix_markdown=False)
         with open(mmd_path, 'w', encoding='utf-8') as f:
             f.write(output)
 
