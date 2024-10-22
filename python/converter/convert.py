@@ -12,6 +12,7 @@ import torch
 import torch_xla
 import torch_xla.core.xla_model as xm
 from dotenv import load_dotenv
+from transformers import NougatProcessor, VisionEncoderDecoderModel
 
 load_dotenv()
 # Configure logging
@@ -25,7 +26,8 @@ BATCH_SIZE = 100  # Number of records to process in each batch
 
 # Initialize Nougat model
 device = xm.xla_device()
-model = NougatModel.from_pretrained("facebook/nougat-base").to(device)
+processor = NougatProcessor.from_pretrained("facebook/nougat-base")
+model = VisionEncoderDecoderModel.from_pretrained("facebook/nougat-base").to(device)
 model.eval()
 
 def download_pdf(pdf_url: str, pdf_id: str) -> Optional[str]:

@@ -5,3 +5,6 @@ google-api-python-client
 nougat-ocr
 requests
 sqlalchemy
+python-dotenv
+psycopg2-binary
+transformers
