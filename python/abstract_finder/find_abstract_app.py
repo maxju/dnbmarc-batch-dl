@@ -28,7 +28,7 @@ def process_file(file_path):
             capture_output=True, text=True
         )
         output = result.stdout.strip().split(',')
-        if len(output) == 5:
+        if len(output) == 3:
             _, abstract_count, abstract_position = output
             return int(abstract_count), float(abstract_position)
         else:
