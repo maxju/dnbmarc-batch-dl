@@ -57,6 +57,7 @@ def process_batch(batch):
                     abstract_count, abstract_position = future.result()
                     record.abstract_num = abstract_count
                     record.abstract_pos = abstract_position
+                    session.commit()
                     logger.debug(f"Processed record ID: {record.id}")
                 except Exception as e:
                     logger.error(f"Error processing record ID {record.id}: {str(e)}")
