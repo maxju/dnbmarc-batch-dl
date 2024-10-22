@@ -156,6 +156,7 @@ def process_batch(drive_service, batch: List[Tuple[str, str]]):
                 logging.error(f"Error processing PDF: {str(e)}")
 
 def main():
+    print(f'PyTorch can access {len(torch_xla.devices())} TPU cores')
     # Create Google Drive service
     drive_service = dfm.get_drive_service()
 
