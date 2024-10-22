@@ -10,17 +10,16 @@ if [ ! -f "$pdf_file" ]; then
 fi
 
 # Convert first 25 pages of PDF to text
-text_content=$(pdftotext -f 1 -l "$max_pages" -layout "$pdf_file" -)
+text_content=$(pdftotext -f 1 -l "$max_pages" -layout "$pdf_file" - 2>/dev/null)
 
-# Count occurrences and find positions for both terms
-abstract_count=$(echo "$text_content" | grep -ci "abstract")
+# Count occurrences and find position for abstract
+abstract_count=$(echo "$text_content" | grep -ci "abstract" || echo "0")
 abstract_position=$(echo "$text_content" | grep -ni "abstract" | head -n 1 | cut -d':' -f1)
+
 total_lines=$(echo "$text_content" | wc -l)
 
-# Calculate positions as percentages, defaulting to 0 if not found
-abstract_pos=$([ -n "$abstract_position" ] && awk "BEGIN {printf \"%.2f\", ($abstract_position / $total_lines)" 2>/dev/null || echo "0.0")
+# Calculate position as percentage, defaulting to 0 if not found or on error
+abstract_pos=$([ -n "$abstract_position" ] && awk "BEGIN {printf \"%.2f\", ($abstract_position / $total_lines) * 100}" 2>/dev/null || echo "0.00")
 
-abstract_count=${abstract_count:-0}
-summary_count=${summary_count:-0}
-
-echo "$pdf_file,$abstract_count,$abstract_pos
+# Always output a result, even if it's all zeros
+echo "$pdf_file,$abstract_count,$abstract_pos"
