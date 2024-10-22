@@ -7,7 +7,6 @@ from get_records import get_pdf_links, mark_record_as_processed
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from nougat import NougatModel
-from nougat.utils.device import parse_device
 from pathlib import Path
 import torch
 import torch_xla
