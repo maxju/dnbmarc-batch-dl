@@ -27,12 +27,13 @@ def get_pdf_links(batch_size: int = 100) -> List[Tuple[str, str]]:
             offset = 0
             while True:
                 results = session.query(DNBRecord.id, DNBRecord.url_dnb_archive)\
+                    .filter(DNBRecord.url_dnb_archive.isnot(None))\
                     .filter(DNBRecord.converted_file.is_(None))\
                     .order_by(DNBRecord.id)\
                     .offset(offset)\
                     .limit(batch_size)\
                     .all()
-                
+
                 if not results:
                     break
                 
