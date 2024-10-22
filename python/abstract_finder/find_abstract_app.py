@@ -20,6 +20,7 @@ files_dir = os.path.join(data_dir, 'files')
 
 # Get database connection
 engine = get_engine()
+Session = sessionmaker(engine)
 
 def process_file(file_path):
     try:
@@ -46,8 +47,7 @@ def process_file(file_path):
         logger.error(f"Error processing file {file_path}: {str(e)}")
         return 0, 0.0
 
-def process_batch(batch):
-    session = get_session(engine)
+def process_batch(session, batch):
     try:
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
             future_to_record = {executor.submit(process_file, os.path.join(files_dir, record.path)): record for record in batch if record.path}
@@ -57,51 +57,50 @@ def process_batch(batch):
                     abstract_count, abstract_position = future.result()
                     record.abstract_num = abstract_count
                     record.abstract_pos = abstract_position
-                    session.commit()
                     logger.debug(f"Processed record ID: {record.id}")
                 except Exception as e:
                     logger.error(f"Error processing record ID {record.id}: {str(e)}")
-
-        session.commit()
-        logger.info(f"Committed changes for batch of {len(batch)} records")
+        logger.info(f"Processed batch of {len(batch)} records")
     except Exception as e:
         logger.error(f"Error processing batch: {str(e)}")
-        session.rollback()
-    finally:
-        session.close()
+        raise
 
 def main():
-    session = get_session(engine)
-    try:
-        # Count only records that need processing
-        total_records = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).count()
-        print(f"Total records to process: {total_records}")
+    with Session() as session:
+        try:
+            # Count only records that need processing
+            total_records = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).count()
+            print(f"Total records to process: {total_records}")
 
-        batch_size = 1000
-        processed_records = 0
+            batch_size = 1000
+            processed_records = 0
 
-        with tqdm(total=total_records, desc="Overall progress", unit="record") as pbar:
-            for offset in range(0, total_records, batch_size):
-                # Query only records that need processing
-                batch = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).offset(offset).limit(batch_size).all()
-                
-                if not batch:
-                    break  # No more records to process
+            with tqdm(total=total_records, desc="Overall progress", unit="record") as pbar:
+                for offset in range(0, total_records, batch_size):
+                    with session.begin():
+                        # Query only records that need processing
+                        batch = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).offset(offset).limit(batch_size).all()
+                        
+                        if not batch:
+                            break  # No more records to process
 
-                print(f"Processing batch of {len(batch)} records (offset: {offset})")
-                process_batch(batch)
-                
-                processed_records += len(batch)
-                pbar.update(len(batch))
-                
-                # Log overall progress every 5% or every 1,000 records, whichever comes first
-                if processed_records % max(total_records // 20, 1000) == 0 or processed_records == total_records:
-                    progress_percentage = (processed_records / total_records) * 100
-                    print(f"Overall progress: {processed_records}/{total_records} records processed ({progress_percentage:.1f}%)")
+                        print(f"Processing batch of {len(batch)} records (offset: {offset})")
+                        process_batch(session, batch)
+                        
+                        processed_records += len(batch)
+                        pbar.update(len(batch))
+                        
+                        # Log overall progress every 5% or every 1,000 records, whichever comes first
+                        if processed_records % max(total_records // 20, 1000) == 0 or processed_records == total_records:
+                            progress_percentage = (processed_records / total_records) * 100
+                            print(f"Overall progress: {processed_records}/{total_records} records processed ({progress_percentage:.1f}%)")
 
-        logger.info("Processing complete.")
-    finally:
-        session.close()
+            logger.info("Processing complete.")
+        except Exception as e:
+            logger.error(f"An error occurred during processing: {str(e)}")
+            session.rollback()
+        finally:
+            session.close()
 
 if __name__ == "__main__":
     main()
