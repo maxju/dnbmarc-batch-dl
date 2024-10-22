@@ -68,16 +68,16 @@ def process_batch(session, batch):
 def main():
     with Session() as session:
         try:
-            # Count only records that need processing
-            total_records = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).count()
-            print(f"Total records to process: {total_records}")
+            with session.begin():
+                # Count only records that need processing
+                total_records = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).count()
+                print(f"Total records to process: {total_records}")
 
-            batch_size = 1000
-            processed_records = 0
+                batch_size = 1000
+                processed_records = 0
 
-            with tqdm(total=total_records, desc="Overall progress", unit="record") as pbar:
-                for offset in range(0, total_records, batch_size):
-                    with session.begin():
+                with tqdm(total=total_records, desc="Overall progress", unit="record") as pbar:
+                    for offset in range(0, total_records, batch_size):
                         # Query only records that need processing
                         batch = session.query(DNBRecord).filter(DNBRecord.abstract_num == None).offset(offset).limit(batch_size).all()
                         
@@ -95,10 +95,13 @@ def main():
                             progress_percentage = (processed_records / total_records) * 100
                             print(f"Overall progress: {processed_records}/{total_records} records processed ({progress_percentage:.1f}%)")
 
-            logger.info("Processing complete.")
+                        # Explicitly flush changes to the database
+                        session.flush()
+
+                logger.info("Processing complete.")
         except Exception as e:
             logger.error(f"An error occurred during processing: {str(e)}")
-            session.rollback()
+            # No need to explicitly rollback, as it will be handled by the context manager
         finally:
             session.close()
 
