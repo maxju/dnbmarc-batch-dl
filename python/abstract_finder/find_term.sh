@@ -21,5 +21,5 @@ total_lines=$(echo "$text_content" | wc -l)
 # Calculate position as percentage, defaulting to 0 if not found or on error
 abstract_pos=$([ -n "$abstract_position" ] && awk "BEGIN {printf \"%.2f\", ($abstract_position / $total_lines) * 100}" 2>/dev/null || echo "0.00")
 
-# Always output a result, even if it's all zeros
-echo "$pdf_file,$abstract_count,$abstract_pos"
+# Ensure output is on a single line with no extra spaces
+echo "${pdf_file},${abstract_count},${abstract_pos}" | tr -d '\n' | tr -s ' '

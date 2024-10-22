@@ -23,23 +23,25 @@ engine = get_engine()
 
 def process_file(file_path):
     try:
-        # Process 'abstract' in a single call
         result = subprocess.run(
             [os.path.join(os.path.dirname(os.path.abspath(__file__)), 'find_term.sh'), file_path, '25'],
             capture_output=True, text=True
         )
         output = result.stdout.strip().split(',')
-        if "Error" in output:
-            logger.error(f"find_term: {file_path}: {output}")
-            return 0, 0.0
-
         if len(output) == 3:
             _, abstract_count, abstract_position = output
-            return int(abstract_count), float(abstract_position)
+            # Clean and convert the values
+            abstract_count = int(abstract_count.strip())
+            abstract_position = float(abstract_position.strip())
+            return abstract_count, abstract_position
         else:
             logger.warning(f"Unexpected output format for file {file_path}")
-            logger.error(output)
+            logger.error(f"Output: {output}")
             return 0, 0.0
+    except ValueError as ve:
+        logger.error(f"Error converting values for file {file_path}: {str(ve)}")
+        logger.error(f"Raw output: {result.stdout}")
+        return 0, 0.0
     except Exception as e:
         logger.error(f"Error processing file {file_path}: {str(e)}")
         return 0, 0.0
