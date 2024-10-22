@@ -17,7 +17,10 @@ abstract_count=$(echo "$text_content" | grep -ci "abstract")
 abstract_position=$(echo "$text_content" | grep -ni "abstract" | head -n 1 | cut -d':' -f1)
 total_lines=$(echo "$text_content" | wc -l)
 
-# Calculate positions as percentages
-abstract_pos=$(awk "BEGIN {printf \"%.2f\", ($abstract_position / $total_lines) * 100}")
+# Calculate positions as percentages, defaulting to 0 if not found
+abstract_pos=$([ -n "$abstract_position" ] && awk "BEGIN {printf \"%.2f\", ($abstract_position / $total_lines)" 2>/dev/null || echo "0.0")
 
-echo "$pdf_file,$abstract_count,$abstract_pos"
+abstract_count=${abstract_count:-0}
+summary_count=${summary_count:-0}
+
+echo "$pdf_file,$abstract_count,$abstract_pos

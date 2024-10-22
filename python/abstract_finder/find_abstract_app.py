@@ -5,11 +5,12 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from sqlalchemy.orm import sessionmaker
+from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.pg_model import get_engine, DNBRecord, get_session
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -28,6 +29,10 @@ def process_file(file_path):
             capture_output=True, text=True
         )
         output = result.stdout.strip().split(',')
+        if "Error" in output:
+            logger.error(f"find_term: {file_path}: {output}")
+            return 0, 0.0
+
         if len(output) == 3:
             _, abstract_count, abstract_position = output
             return int(abstract_count), float(abstract_position)
@@ -69,10 +74,21 @@ def main():
         logger.info(f"Total records to process: {total_records}")
 
         batch_size = 1000
-        for offset in range(0, total_records, batch_size):
-            batch = session.query(DNBRecord).offset(offset).limit(batch_size).all()
-            logger.info(f"Processing batch of {len(batch)} records (offset: {offset})")
-            process_batch(batch)
+        processed_records = 0
+
+        with tqdm(total=total_records, desc="Overall progress", unit="record") as pbar:
+            for offset in range(0, total_records, batch_size):
+                batch = session.query(DNBRecord).offset(offset).limit(batch_size).all()
+                logger.info(f"Processing batch of {len(batch)} records (offset: {offset})")
+                process_batch(batch)
+                
+                processed_records += len(batch)
+                pbar.update(len(batch))
+                
+                # Log overall progress every 5% or every 10,000 records, whichever comes first
+                if processed_records % max(total_records // 20, 1000) == 0 or processed_records == total_records:
+                    progress_percentage = (processed_records / total_records) * 100
+                    print(f"Overall progress: {processed_records}/{total_records} records processed ({progress_percentage:.1f}%)")
 
         logger.info("Processing complete.")
     finally:
