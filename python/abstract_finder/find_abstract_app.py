@@ -57,6 +57,7 @@ def process_batch(session, batch):
                     abstract_count, abstract_position = future.result()
                     record.abstract_num = abstract_count
                     record.abstract_pos = abstract_position
+                    session.commit()
                     logger.debug(f"Processed record ID: {record.id}")
                 except Exception as e:
                     logger.error(f"Error processing record ID {record.id}: {str(e)}")
@@ -96,7 +97,7 @@ def main():
                             print(f"Overall progress: {processed_records}/{total_records} records processed ({progress_percentage:.1f}%)")
 
                         # Explicitly flush changes to the database
-                        session.flush()
+                        session.commit()
 
                 logger.info("Processing complete.")
         except Exception as e:
