@@ -2,3 +2,4 @@ pandas
 requests
 sqlite3
 fitz
+python-dotenv
