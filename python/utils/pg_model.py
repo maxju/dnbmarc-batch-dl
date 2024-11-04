@@ -55,7 +55,7 @@ def get_engine(database_url=None):
         PG_HOST = os.getenv('POSTGRES_HOST', 'postgres')
         PG_PASS = os.getenv('POSTGRES_PASSWORD')
         PG_PORT = os.getenv('POSTGRES_PORT', 5432)
-        DATABASE_URL = f"postgresql://dnb:{PG_PASS}@{PG_HOST}:{PG_PORT}/dnb_records_subset"
+        DATABASE_URL = f"postgresql://dnb:{PG_PASS}@{PG_HOST}:{PG_PORT}/dnb_records"
     else:
         DATABASE_URL = database_url
     return create_engine(DATABASE_URL)
