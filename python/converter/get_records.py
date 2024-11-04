@@ -44,10 +44,11 @@ class ProgressTracker:
         # Format times
         elapsed = str(timedelta(seconds=int(elapsed_time)))
         remaining = str(timedelta(seconds=int(estimated_remaining_seconds)))
+        records_per_hour = records_per_second * 3600
         
         logging.info(
             f"Progress: {progress:.1f}% ({self.processed_records}/{self.total_records}) | "
-            f"Speed: {records_per_second:.1f} records/sec | "
+            f"Speed: {records_per_hour:.1f} records/hour | "
             f"Elapsed: {elapsed} | "
             f"Remaining: {remaining}"
         )
@@ -113,7 +114,7 @@ def mark_record_as_processed(pdf_id: str, drive_file_id: str, drive_filename: st
                 record.converted_file = drive_filename
                 record.drive_file_id = drive_file_id
                 session.commit()
-                logging.info(f"Marked record {pdf_id} as processed with Drive file ID: {drive_file_id}")
+                logging.info(f"Marked record {pdf_id} as processed with Drive file ID: {drive_file_id}; URL: https://drive.google.com/file/d/{drive_file_id}/view")
             else:
                 logging.warning(f"Record with ID {pdf_id} not found")
     except Exception as e:

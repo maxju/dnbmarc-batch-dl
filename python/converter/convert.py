@@ -31,8 +31,8 @@ gpu_count = torch.cuda.device_count()
 gpu_ids = list(range(gpu_count))
 gpu_cycle = cycle(gpu_ids)
 
-MAX_WORKERS = gpu_count * 4
-BATCH_SIZE = MAX_WORKERS * 4
+MAX_WORKERS = 12
+BATCH_SIZE = 1
 
 logging.info(f"Using {gpu_count} GPUs with {MAX_WORKERS} workers and batch size {BATCH_SIZE}")
 
@@ -82,8 +82,11 @@ def upload_file_to_drive(service, file_path: str) -> Tuple[bool, Optional[str], 
     try:
         file_id, filename = dfm.upload_file(service, file_path, DRIVE_FOLDER_ID)
         if file_id and filename:
-            os.remove(file_path)
-            logging.info(f"Successfully uploaded and deleted: {file_path}")
+            uploaded_folder = os.path.join(os.path.dirname(file_path), 'uploaded')
+            os.makedirs(uploaded_folder, exist_ok=True)
+            new_path = os.path.join(uploaded_folder, os.path.basename(file_path))
+            os.rename(file_path, new_path)
+            logging.info(f"Successfully uploaded and moved to {new_path}")
             return True, file_id, filename
         else:
             logging.error(f"Failed to upload {file_path}: file_id or filename is None")
@@ -104,6 +107,10 @@ def process_pdf(drive_service, pdf_id: str, pdf_url: str) -> bool:
         return False
 
     try:
+        # clear cache before processing
+        torch.cuda.empty_cache()
+        flush_cuda_memory()
+
         # Convert PDF using models from assigned GPU
         markdown_text, _, _ = convert_single_pdf(
             pdf_path, 
@@ -115,6 +122,7 @@ def process_pdf(drive_service, pdf_id: str, pdf_url: str) -> bool:
             f.write(markdown_text)
 
         # Clear GPU memory after processing
+        torch.cuda.empty_cache()
         flush_cuda_memory()
 
         success, file_id, filename = upload_file_to_drive(drive_service, mmd_path)
@@ -132,7 +140,8 @@ def process_pdf(drive_service, pdf_id: str, pdf_url: str) -> bool:
         logging.error(f"Error converting PDF {pdf_id} on GPU {gpu_id}: {str(e)}")
         if os.path.exists(pdf_path):
             os.remove(pdf_path)
-        flush_cuda_memory()  # Make sure to clear memory on error
+        flush_cuda_memory() 
+        torch.cuda.empty_cache()
         return False
 
 def process_pdf_with_retry(drive_service, pdf_id: str, pdf_url: str) -> bool:
