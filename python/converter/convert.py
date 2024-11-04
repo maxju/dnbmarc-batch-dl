@@ -154,9 +154,8 @@ def process_batch(drive_service, batch: List[Tuple[str, str]]):
     """
     Process a batch of PDFs in parallel.
     """
-    optimal_workers = gpu_count * 2  # Use 2 workers per GPU
     
-    with ThreadPoolExecutor(max_workers=optimal_workers) as executor:
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = [
             executor.submit(process_pdf_with_retry, drive_service, pdf_id, pdf_url) 
             for pdf_id, pdf_url in batch
