@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables from the project root
+load_dotenv()
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 Base = declarative_base()
@@ -53,7 +54,8 @@ def get_engine(database_url=None):
     if database_url is None:
         PG_HOST = os.getenv('POSTGRES_HOST', 'postgres')
         PG_PASS = os.getenv('POSTGRES_PASSWORD')
-        DATABASE_URL = f"postgresql://dnb:{PG_PASS}@{PG_HOST}/dnb_records"
+        PG_PORT = os.getenv('POSTGRES_PORT', 5432)
+        DATABASE_URL = f"postgresql://dnb:{PG_PASS}@{PG_HOST}:{PG_PORT}/dnb_records"
     else:
         DATABASE_URL = database_url
     return create_engine(DATABASE_URL)

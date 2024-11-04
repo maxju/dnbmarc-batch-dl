@@ -6,13 +6,11 @@ import drive_filemanager as dfm
 from get_records import get_pdf_links, mark_record_as_processed
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
-from nougat import NougatModel
-from nougat.utils.device import parse_device
 from pathlib import Path
-import torch
-import torch_xla
-import torch_xla.core.xla_model as xm
 from dotenv import load_dotenv
+from marker.convert import convert_single_pdf
+from marker.models import load_all_models
+
 
 load_dotenv()
 # Configure logging
@@ -21,14 +19,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Constants
 DRIVE_FOLDER_ID = os.getenv('DRIVE_FOLDER_ID')
 LOCAL_TEMP_DIR = "temp_files"
-MAX_WORKERS = 4  # Number of parallel workers
-BATCH_SIZE = 100  # Number of records to process in each batch
+MAX_WORKERS = 1  # Number of parallel workers
+BATCH_SIZE = 1  # Number of records to process in each batch
+# TORCH_DEVICE = "mps"
 
-# Initialize Nougat model
-device = xm.xla_device()
-checkpoint = get_checkpoint(None)
-model = NougatModel.from_pretrained("facebook/nougat-base").to(device)
-model.eval()
+# Load models once at module level for reuse
+model_lst = load_all_models()
 
 def download_pdf(pdf_url: str, pdf_id: str) -> Optional[str]:
     """
@@ -56,7 +52,7 @@ def download_pdf(pdf_url: str, pdf_id: str) -> Optional[str]:
 
 def convert_pdf_to_mmd(pdf_path: str) -> Optional[str]:
     """
-    Convert a PDF file to Markdown using Nougat.
+    Convert a PDF file to Markdown using the Nougat model.
     
     Args:
         pdf_path: Local path of the PDF file
@@ -68,11 +64,10 @@ def convert_pdf_to_mmd(pdf_path: str) -> Optional[str]:
         pdf_path = Path(pdf_path)
         mmd_path = pdf_path.with_suffix('.mmd')
 
-        with torch.no_grad():
-            output = model.inference(pdf_path)
+        markdown_output, _, _ = convert_single_pdf(pdf_path, model_lst, device=TORCH_DEVICE, langs=["en","de"])
 
         with open(mmd_path, 'w', encoding='utf-8') as f:
-            f.write(output)
+            f.write(markdown_output)
 
         logging.info(f"Successfully converted {pdf_path} to {mmd_path}")
         return str(mmd_path)
@@ -106,7 +101,7 @@ def upload_file_to_drive(service, file_path: str) -> Tuple[bool, Optional[str], 
 
 def process_pdf(drive_service, pdf_id: str, pdf_url: str) -> bool:
     """
-    Process a single PDF: download, convert, upload, and clean up.
+    Process a single PDF: download, convert using Marker, upload, and clean up.
     
     Args:
         drive_service: Authenticated Google Drive service object
@@ -120,19 +115,30 @@ def process_pdf(drive_service, pdf_id: str, pdf_url: str) -> bool:
     if not pdf_path:
         return False
 
-    mmd_path = convert_pdf_to_mmd(pdf_path)
-    if not mmd_path:
-        os.remove(pdf_path)
-        return False
+    try:
+        # Convert PDF to markdown using Marker (ignore images and metadata)
+        markdown_text, _, _ = convert_single_pdf(pdf_path, model_lst)
+        
+        # Save markdown to file
+        mmd_path = pdf_path.replace('.pdf', '.mmd')
+        with open(mmd_path, 'w', encoding='utf-8') as f:
+            f.write(markdown_text)
 
-    success, file_id, filename = upload_file_to_drive(drive_service, mmd_path)
-    os.remove(pdf_path)
-    if success:
-        mark_record_as_processed(pdf_id, file_id, filename)
-        return True
-    else:
-        if os.path.exists(mmd_path):
-            os.remove(mmd_path)
+        success, file_id, filename = upload_file_to_drive(drive_service, mmd_path)
+        os.remove(pdf_path)
+        
+        if success:
+            mark_record_as_processed(pdf_id, file_id, filename)
+            return True
+        else:
+            if os.path.exists(mmd_path):
+                os.remove(mmd_path)
+            return False
+            
+    except Exception as e:
+        logging.error(f"Error converting PDF {pdf_id}: {str(e)}")
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
         return False
 
 def process_batch(drive_service, batch: List[Tuple[str, str]]):
@@ -156,6 +162,7 @@ def process_batch(drive_service, batch: List[Tuple[str, str]]):
                 logging.error(f"Error processing PDF: {str(e)}")
 
 def main():
+    logging.info("Starting converter.py")
     # Create Google Drive service
     drive_service = dfm.get_drive_service()
 

@@ -26,17 +26,18 @@ def get_pdf_links(batch_size: int = 100) -> List[Tuple[str, str]]:
         with get_session(engine) as session:
             offset = 0
             while True:
-                results = session.query(DNBRecord.id, DNBRecord.url_dnb_archive)\
+                results = session.query(DNBRecord.idn, DNBRecord.url_dnb_archive)\
+                    .filter(DNBRecord.url_dnb_archive.isnot(None))\
                     .filter(DNBRecord.converted_file.is_(None))\
-                    .order_by(DNBRecord.id)\
+                    .order_by(DNBRecord.idn)\
                     .offset(offset)\
                     .limit(batch_size)\
                     .all()
-                
+
                 if not results:
                     break
                 
-                yield [(str(row.id), row.url_dnb_archive) for row in results]
+                yield [(str(row.idn), row.url_dnb_archive) for row in results]
                 offset += batch_size
     except Exception as e:
         logging.error(f"Error fetching PDF links from database: {e}")

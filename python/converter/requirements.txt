@@ -1,7 +1,9 @@
+google-auth
 google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
-nougat-ocr
-torch~=2.4.0
-torch_xla[tpu]~=2.4.0
-torchvision
+requests
+sqlalchemy
+python-dotenv
+psycopg2-binary
+marker-pdf
