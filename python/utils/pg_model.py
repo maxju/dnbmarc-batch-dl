@@ -12,7 +12,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 Base = declarative_base()
 
 class DNBRecord(Base):
-    __tablename__ = 'dnb_records'
+    __tablename__ = "dnb_records_subset"
     id = Column(Integer, primary_key=True, autoincrement=True)
     idn = Column(String, unique=True, index=True)  # DNB IDN identifier
     title = Column(Text)
@@ -55,7 +55,7 @@ def get_engine(database_url=None):
         PG_HOST = os.getenv('POSTGRES_HOST', 'postgres')
         PG_PASS = os.getenv('POSTGRES_PASSWORD')
         PG_PORT = os.getenv('POSTGRES_PORT', 5432)
-        DATABASE_URL = f"postgresql://dnb:{PG_PASS}@{PG_HOST}:{PG_PORT}/dnb_records"
+        DATABASE_URL = f"postgresql://dnb:{PG_PASS}@{PG_HOST}:{PG_PORT}/dnb_records_subset"
     else:
         DATABASE_URL = database_url
     return create_engine(DATABASE_URL)
