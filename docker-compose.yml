@@ -56,3 +56,17 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+  converter:
+    build:
+      context: .
+      target: converter
+    volumes:
+      - ./data:/data
+      - ./python:/app
+    env_file:
+      - .env
+    environment:
+    - DNNL_VERBOSE=0
+    - EXTRACT_IMAGES=false
+    restart: no

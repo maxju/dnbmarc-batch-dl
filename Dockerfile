@@ -35,3 +35,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app/abstract_finder
 RUN pip install --no-cache-dir -r requirements.txt
 CMD ["python", "find_abstract_app.py"]
+
+FROM base AS converter
+ENV EXTRACT_IMAGES=false
+
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app/converter
+RUN pip install --no-cache-dir -r requirements.txt
+CMD ["python", "convert.py"]
