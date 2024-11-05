@@ -1,5 +1,6 @@
 import os
 import logging
+from collections import deque
 import requests
 from typing import Optional, Tuple, List
 import drive_filemanager as dfm
@@ -9,39 +10,26 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 from marker.convert import convert_single_pdf
+from marker.settings import settings
 from marker.models import load_all_models
 from marker.utils import flush_cuda_memory
 from itertools import cycle
-import torch
+import torch.multiprocessing as mp
+from tqdm import tqdm
 
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # For M1/M2 Macs
 os.environ["EXTRACT_IMAGES"] = "false"  # Disable image extraction
+os.environ["IN_STREAMLIT"] = "true" # Avoid multiprocessing inside surya
+os.environ["PDFTEXT_CPU_WORKERS"] = "1" # Avoid multiprocessing inside pdftext
 
-load_dotenv()
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Constants
 DRIVE_FOLDER_ID = os.getenv('DRIVE_FOLDER_ID')
 LOCAL_TEMP_DIR = "temp_files"
 # TORCH_DEVICE = "mps"
 
-# Get available GPUs
-gpu_count = torch.cuda.device_count()
-gpu_ids = list(range(gpu_count))
-gpu_cycle = cycle(gpu_ids)
-
-MAX_WORKERS = 12
-BATCH_SIZE = 1
-
-logging.info(f"Using {gpu_count} GPUs with {MAX_WORKERS} workers and batch size {BATCH_SIZE}")
-
-# Load models for each GPU
-model_lst_per_gpu = {}
-for gpu_id in gpu_ids:
-    with torch.cuda.device(gpu_id):
-        model_lst_per_gpu[gpu_id] = load_all_models()
-        logging.info(f"Loaded models on GPU {gpu_id}")
+MAX_WORKERS = 4
+BATCH_SIZE = 40
 
 def download_pdf(pdf_url: str, pdf_id: str) -> Optional[str]:
     """
@@ -95,39 +83,29 @@ def upload_file_to_drive(service, file_path: str) -> Tuple[bool, Optional[str], 
         logging.error(f"Failed to upload {file_path}: {str(e)}")
         return False, None, None
 
-def process_pdf(drive_service, pdf_id: str, pdf_url: str) -> bool:
+
+def process_pdf(model_lst, drive_service, pdf_id: str, pdf_url: str) -> bool:
     """
-    Process a single PDF using round-robin GPU assignment.
+    Process a single PDF.
     """
-    gpu_id = next(gpu_cycle)  # Get next GPU in rotation
-    torch.cuda.set_device(gpu_id)
-    
     pdf_path = download_pdf(pdf_url, pdf_id)
     if not pdf_path:
         return False
 
     try:
-        # clear cache before processing
-        torch.cuda.empty_cache()
-        flush_cuda_memory()
-
-        # Convert PDF using models from assigned GPU
+        # Convert PDF
         markdown_text, _, _ = convert_single_pdf(
             pdf_path, 
-            model_lst_per_gpu[gpu_id]
+            model_lst
         )
-        
+
         mmd_path = pdf_path.replace('.pdf', '.mmd')
         with open(mmd_path, 'w', encoding='utf-8') as f:
             f.write(markdown_text)
 
-        # Clear GPU memory after processing
-        torch.cuda.empty_cache()
-        flush_cuda_memory()
-
         success, file_id, filename = upload_file_to_drive(drive_service, mmd_path)
         os.remove(pdf_path)
-        
+
         if success:
             mark_record_as_processed(pdf_id, file_id, filename)
             return True
@@ -135,73 +113,85 @@ def process_pdf(drive_service, pdf_id: str, pdf_url: str) -> bool:
             if os.path.exists(mmd_path):
                 os.remove(mmd_path)
             return False
-            
+                
     except Exception as e:
-        logging.error(f"Error converting PDF {pdf_id} on GPU {gpu_id}: {str(e)}")
+        logging.error(f"Error converting PDF {pdf_id}: {str(e)}")
         if os.path.exists(pdf_path):
             os.remove(pdf_path)
-        flush_cuda_memory() 
-        torch.cuda.empty_cache()
         return False
 
-def process_pdf_with_retry(drive_service, pdf_id: str, pdf_url: str) -> bool:
-    """
-    Process a PDF with retry logic for OOM errors
-    """
-    for attempt in range(gpu_count):
-        try:
-            return process_pdf(drive_service, pdf_id, pdf_url)
-        except torch.cuda.OutOfMemoryError:
-            flush_cuda_memory()
-            continue
-        except Exception as e:
-            logging.error(f"Error on attempt {attempt}: {str(e)}")
-            continue
-    return False
 
-def process_batch(drive_service, batch: List[Tuple[str, str]]):
-    """
-    Process a batch of PDFs in parallel.
-    """
-    
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [
-            executor.submit(process_pdf_with_retry, drive_service, pdf_id, pdf_url) 
-            for pdf_id, pdf_url in batch
-        ]
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-                if result:
-                    logging.info("Successfully processed a PDF")
-                else:
-                    logging.warning("Failed to process a PDF")
-            except Exception as e:
-                logging.error(f"Error processing PDF: {str(e)}")
+def worker_init(shared_model):
+    if shared_model is None:
+        shared_model = load_all_models()
+
+    global model_refs
+    model_refs = shared_model
+
+
+def worker_exit():
+    global model_refs
+    del model_refs
+
 
 def main():
-    logging.info(f"Starting converter.py with {gpu_count} GPUs")
-    for gpu_id in gpu_ids:
-        gpu_name = torch.cuda.get_device_name(gpu_id)
-        gpu_memory = torch.cuda.get_device_properties(gpu_id).total_memory / 1e9  # Convert to GB
-        logging.info(f"GPU {gpu_id}: {gpu_name} with {gpu_memory:.2f}GB memory")
+    load_dotenv()
+    # Configure logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+    logging.info(f"Using {MAX_WORKERS} workers and batch size {BATCH_SIZE}")
     # Create Google Drive service
     drive_service = dfm.get_drive_service()
 
     # Ensure local temporary directory exists
     os.makedirs(LOCAL_TEMP_DIR, exist_ok=True)
 
+    try:
+        mp.set_start_method('spawn') # Required for CUDA, forkserver doesn't work
+    except RuntimeError:
+        raise RuntimeError("Set start method to spawn twice. This may be a temporary issue with the script. Please try running it again.")
+
+    if settings.TORCH_DEVICE == "mps" or settings.TORCH_DEVICE_MODEL == "mps":
+        print("Cannot use MPS with torch multiprocessing share_memory. This will make things less memory efficient. If you want to share memory, you have to use CUDA or CPU.  Set the TORCH_DEVICE environment variable to change the device.")
+        model_lst = None
+    else:
+        model_lst = load_all_models()
+
+        for model in model_lst:
+            if model is None:
+                continue
+            model.share_memory()
+
     batch_count = 0
     # Process PDFs in batches
     for batch in get_pdf_links(BATCH_SIZE):
         logging.info(f"Processing batch number {batch_count} containing {len(batch)} PDFs")
-        process_batch(drive_service, batch)
-        torch.cuda.empty_cache()  # Clear GPU memory after each batch
+        task_args = [(model_lst, drive_service, pdf_id, pdf_url) for pdf_id, pdf_url in batch]
+        total_pdfs = len(batch)
+        
+        # Use torch multiprocessing
+        with mp.Pool(processes=MAX_WORKERS, initializer=worker_init, initargs=(model_lst,)) as pool:
+            # Process PDFs with progress bar
+            results = list(tqdm(
+                pool.starmap(process_pdf, task_args),
+                total=total_pdfs,
+                desc="Processing PDFs",
+                unit="pdf"
+            ))
+            
+            # Ensure proper cleanup
+            pool._worker_handler.terminate = worker_exit
+            
+            # Count successful conversions
+            processed_count = sum(1 for result in results if result)
+        
+        logging.info(f"Batch complete: {processed_count}/{total_pdfs} PDFs processed successfully")
         time.sleep(1)  # Small delay between batches
-        batch_count += 1
+        batch_count += 4
 
     logging.info("Conversion and upload process completed.")
+    del model_lst
+
 
 if __name__ == "__main__":
     main()
