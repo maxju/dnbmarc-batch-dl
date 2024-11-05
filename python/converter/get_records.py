@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timedelta
 import time
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from utils.pg_model import get_engine, init_db, get_session, DNBRecord
+from utils.pg_model import get_engine, init_db, get_session, DNBRecord, retry_on_db_error
 
 engine = get_engine()
 
@@ -53,6 +53,7 @@ class ProgressTracker:
             f"Remaining: {remaining}"
         )
 
+@retry_on_db_error()
 def get_total_records() -> int:
     """Get total number of unprocessed records."""
     with get_session(engine) as session:
@@ -61,31 +62,36 @@ def get_total_records() -> int:
             .filter(DNBRecord.converted_file.is_(None))\
             .scalar()
 
-def get_pdf_links(batch_size: int = 100) -> Generator[List[Tuple[str, str]], None, None]:
-    """
-    Retrieve PDF links and their associated IDs from the PostgreSQL database in batches.
-    
-    Args:
-        batch_size: Number of records to fetch in each batch
+@retry_on_db_error()
+def mark_record_as_processed(pdf_id: str, drive_file_id: str, drive_filename: str):
+    """Mark a record as processed in the database."""
+    with get_session(engine) as session:
+        record = session.query(DNBRecord).filter(DNBRecord.idn == pdf_id).first()
+        if record:
+            record.converted_file = drive_filename
+            record.drive_file_id = drive_file_id
+            session.commit()
+            logging.info(f"Marked record {pdf_id} as processed with Drive file ID: {drive_file_id}")
+        else:
+            logging.warning(f"Record with ID {pdf_id} not found")
 
-    Yields:
-        A list of tuples containing (pdf_id, pdf_url)
-    """
+def get_pdf_links(batch_size: int = 100) -> Generator[List[Tuple[str, str]], None, None]:
+    """Retrieve PDF links with retry logic."""
     try:
-        # Get total number of records for progress tracking
         total_records = get_total_records()
         progress = ProgressTracker(total_records, batch_size)
         
-        with get_session(engine) as session:
-            offset = 0
-            while True:
-                results = session.query(DNBRecord.idn, DNBRecord.url_dnb_archive)\
-                    .filter(DNBRecord.url_dnb_archive.isnot(None))\
-                    .filter(DNBRecord.converted_file.is_(None))\
-                    .order_by(DNBRecord.idn)\
-                    .offset(offset)\
-                    .limit(batch_size)\
-                    .all()
+        offset = 0
+        while True:
+            try:
+                with get_session(engine) as session:
+                    results = session.query(DNBRecord.idn, DNBRecord.url_dnb_archive)\
+                        .filter(DNBRecord.url_dnb_archive.isnot(None))\
+                        .filter(DNBRecord.converted_file.is_(None))\
+                        .order_by(DNBRecord.idn)\
+                        .offset(offset)\
+                        .limit(batch_size)\
+                        .all()
 
                 if not results:
                     break
@@ -95,27 +101,11 @@ def get_pdf_links(batch_size: int = 100) -> Generator[List[Tuple[str, str]], Non
                 yield batch
                 offset += batch_size
                 
+            except (OperationalError, SQLAlchemyError) as e:
+                logging.error(f"Database error while fetching batch at offset {offset}: {e}")
+                # Wait before retrying this batch
+                time.sleep(5)
+                continue
+                
     except Exception as e:
-        logging.error(f"Error fetching PDF links from database: {e}")
-
-def mark_record_as_processed(pdf_id: str, drive_file_id: str, drive_filename: str):
-    """
-    Mark a record as processed in the database after successful conversion and upload.
-    
-    Args:
-        pdf_id: The ID of the PDF that has been processed
-        drive_file_id: The Google Drive file ID of the uploaded file
-        drive_filename: The filename of the uploaded file in Google Drive
-    """
-    try:
-        with get_session(engine) as session:
-            record = session.query(DNBRecord).filter(DNBRecord.idn == pdf_id).first()
-            if record:
-                record.converted_file = drive_filename
-                record.drive_file_id = drive_file_id
-                session.commit()
-                logging.info(f"Marked record {pdf_id} as processed with Drive file ID: {drive_file_id}; URL: https://drive.google.com/file/d/{drive_file_id}/view")
-            else:
-                logging.warning(f"Record with ID {pdf_id} not found")
-    except Exception as e:
-        logging.error(f"Error marking record {pdf_id} as processed: {e}")
+        logging.error(f"Error in get_pdf_links: {e}")

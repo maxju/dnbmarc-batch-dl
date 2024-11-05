@@ -4,6 +4,10 @@ from sqlalchemy.dialects.postgresql import UUID
 import uuid
 import os
 from dotenv import load_dotenv
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
+import time
+import logging
+import random
 
 # Load environment variables from the project root
 load_dotenv()
@@ -63,6 +67,37 @@ def get_engine(database_url=None):
 def init_db(engine):
     Base.metadata.create_all(engine)
 
+def retry_on_db_error(max_retries=10, initial_delay=1, max_delay=60):
+    """
+    Decorator to retry database operations on failure.
+    Uses exponential backoff with jitter.
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            delay = initial_delay
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except (OperationalError, SQLAlchemyError) as e:
+                    if attempt == max_retries - 1:
+                        raise
+                    
+                    # Calculate delay with some random jitter
+                    jitter = random.uniform(0, 0.1 * delay)
+                    sleep_time = min(delay + jitter, max_delay)
+                    
+                    logging.warning(
+                        f"Database operation failed (attempt {attempt + 1}/{max_retries}). "
+                        f"Retrying in {sleep_time:.1f}s. Error: {str(e)}"
+                    )
+                    
+                    time.sleep(sleep_time)
+                    delay *= 2  # Exponential backoff
+            return None
+        return wrapper
+    return decorator
+
+@retry_on_db_error()
 def get_session(engine):
     Session = sessionmaker(bind=engine)
     return Session()
