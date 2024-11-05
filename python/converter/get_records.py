@@ -1,13 +1,13 @@
 import logging
 from typing import List, Tuple, Generator
-from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy import func
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 import time
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from utils.pg_model import get_engine, init_db, get_session, DNBRecord, retry_on_db_error
+from utils.pg_model import get_engine, get_session, DNBRecord, retry_on_db_error
 
 engine = get_engine()
 
