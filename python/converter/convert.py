@@ -12,8 +12,6 @@ from dotenv import load_dotenv
 from marker.convert import convert_single_pdf
 from marker.settings import settings
 from marker.models import load_all_models
-from marker.utils import flush_cuda_memory
-from itertools import cycle
 import torch.multiprocessing as mp
 from tqdm import tqdm
 
@@ -28,8 +26,8 @@ DRIVE_FOLDER_ID = os.getenv('DRIVE_FOLDER_ID')
 LOCAL_TEMP_DIR = "temp_files"
 # TORCH_DEVICE = "mps"
 
-MAX_WORKERS = 4
-BATCH_SIZE = 40
+MAX_WORKERS = 6
+BATCH_SIZE = 60
 
 def download_pdf(pdf_url: str, pdf_id: str) -> Optional[str]:
     """
