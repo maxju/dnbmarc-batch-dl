@@ -3,3 +3,5 @@ requests
 sqlite3
 fitz
 python-dotenv
+tabulate
+
