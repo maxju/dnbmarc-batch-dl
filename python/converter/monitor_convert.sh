@@ -6,27 +6,56 @@ LOG_FILE="converter.log"
 HEARTBEAT_FILE="converter_heartbeat.txt"
 LAST_RESTART=$(date +%s)
 MIN_UPTIME_SECONDS=30  # Minimum time between restarts to prevent rapid restart loops
+MAX_LOG_LINES=1000    # Maximum number of lines to keep in the log file
+ROTATE_CHECK_INTERVAL=300  # Check log size every 5 minutes
+
+rotate_logs() {
+    local log_lines=$(wc -l < "$LOG_FILE")
+    if [ "$log_lines" -gt "$MAX_LOG_LINES" ]; then
+        echo "$(date): Log file exceeds $MAX_LOG_LINES lines. Rotating..." | tee -a $LOG_FILE
+        tail -n $MAX_LOG_LINES "$LOG_FILE" > "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
+    fi
+}
+
+# Initial log rotation
+if [ -f "$LOG_FILE" ]; then
+    rotate_logs
+fi
 
 cleanup() {
-    echo "Stopping conversion process..."
+    echo "$(date): Initiating cleanup..." | tee -a $LOG_FILE
+    
+    # Kill all child processes in the process group
     if [ ! -z "$PID" ]; then
-        pkill -P $PID
+        echo "$(date): Terminating conversion process and its children..." | tee -a $LOG_FILE
+        pkill -TERM -P $PID 2>/dev/null
         sleep 2
-        pkill -9 -P $PID 2>/dev/null
-        kill -9 $PID 2>/dev/null
+        pkill -KILL -P $PID 2>/dev/null
+        kill -KILL $PID 2>/dev/null
         wait $PID 2>/dev/null
     fi
+    
+    # Cleanup any stray Python processes
+    echo "$(date): Cleaning up any remaining processes..." | tee -a $LOG_FILE
     pkill -f "anaconda3/envs/dnb-converter/bin/python3.*multiprocessing" 2>/dev/null
-    rm -f $HEARTBEAT_FILE
+    
+    # Remove heartbeat file
+    if [ -f "$HEARTBEAT_FILE" ]; then
+        echo "$(date): Removing heartbeat file..." | tee -a $LOG_FILE
+        rm -f $HEARTBEAT_FILE
+    fi
+    
+    echo "$(date): Cleanup complete. Exiting..." | tee -a $LOG_FILE
     exit 0
 }
 
-trap cleanup SIGINT SIGTERM
+# Trap various termination signals
+trap cleanup SIGINT SIGTERM SIGQUIT SIGHUP
 
 check_process_health() {
     # Check if heartbeat file exists and is recent
     if [ -f "$HEARTBEAT_FILE" ]; then
-        HEARTBEAT_TIME=$(cat $HEARTBEAT_FILE)
+        HEARTBEAT_TIME=$(cat $HEARTBEAT_FILE | cut -d. -f1)  # Truncate to integer
         CURRENT_TIME=$(date +%s)
         DIFF_SECONDS=$((CURRENT_TIME - HEARTBEAT_TIME))
         
@@ -59,6 +88,11 @@ while true; do
         # Check if enough time has passed since last restart
         CURRENT_TIME=$(date +%s)
         UPTIME=$((CURRENT_TIME - LAST_RESTART))
+        
+        # Rotate logs periodically
+        if [ $((UPTIME % ROTATE_CHECK_INTERVAL)) -eq 0 ]; then
+            rotate_logs
+        fi
         
         if ! check_process_health; then
             if [ $UPTIME -lt $MIN_UPTIME_SECONDS ]; then
