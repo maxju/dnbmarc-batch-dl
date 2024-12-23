@@ -1,5 +1,6 @@
 .DS_Store
 data/*
+!data/ger_open_access_with_gnd.csv
 !data/ddc/
 .venv/
 *.db
