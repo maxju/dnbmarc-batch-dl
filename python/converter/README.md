@@ -1,50 +1,33 @@
-# Setup for HTWK GPU Server:
+# MARC Record Converter Setup (HTWK GPU Server)
 
-## Activate conda environment
+## Setup and Running
 
+1. Navigate to the converter directory:
 ```bash
-conda activate linus-preprocess
+cd python/converter
 ```
 
-## Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-## Setup TMUX Bash
-
+2. Create and attach to tmux session:
 ```bash
 tmux new -s converter
 ```
 
-## Run the converter with monitoring
+3. Inside tmux, perform the setup:
+```bash
+conda activate linus-preprocess
+pip install -r requirements.txt
+```
 
+4. Start the converter with monitoring (still inside tmux):
 ```bash
 ./monitor_convert.sh
 ```
 
-### keystroke to detach from tmux session
+## TMUX Commands Reference
 
-```bash
-Ctrl+b d
-```
+All these commands can be used to manage your tmux session:
 
-### attach to tmux session
-
-```bash
-tmux attach -t converter
-```
-
-### check tmux sessions
-
-```bash
-tmux ls
-```
-
-
-### kill tmux session
-
-```bash
-tmux kill-session -t converter
-```
+- Detach from session: `Ctrl+b d`
+- Reattach to session: `tmux attach -t converter`
+- List all sessions: `tmux ls`
+- Kill session: `tmux kill-session -t converter`
