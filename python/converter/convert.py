@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 from collections import deque
 import requests
 from typing import Optional, Tuple, List
@@ -134,61 +135,84 @@ def worker_exit():
 
 def main():
     load_dotenv()
-    # Configure logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    logging.info(f"Using {MAX_WORKERS} workers and batch size {BATCH_SIZE}")
-    # Create Google Drive service
-    drive_service = dfm.get_drive_service()
-
-    # Ensure local temporary directory exists
-    os.makedirs(LOCAL_TEMP_DIR, exist_ok=True)
+    # Add heartbeat file management
+    heartbeat_file = "converter_heartbeat.txt"
+    def update_heartbeat():
+        with open(heartbeat_file, 'w') as f:
+            f.write(str(time.time()))
 
     try:
-        mp.set_start_method('spawn') # Required for CUDA, forkserver doesn't work
-    except RuntimeError:
-        raise RuntimeError("Set start method to spawn twice. This may be a temporary issue with the script. Please try running it again.")
+        logging.info(f"Using {MAX_WORKERS} workers and batch size {BATCH_SIZE}")
+        drive_service = dfm.get_drive_service()
+        os.makedirs(LOCAL_TEMP_DIR, exist_ok=True)
 
-    if settings.TORCH_DEVICE == "mps" or settings.TORCH_DEVICE_MODEL == "mps":
-        print("Cannot use MPS with torch multiprocessing share_memory. This will make things less memory efficient. If you want to share memory, you have to use CUDA or CPU.  Set the TORCH_DEVICE environment variable to change the device.")
-        model_lst = None
-    else:
-        model_lst = load_all_models()
+        try:
+            mp.set_start_method('spawn')
+        except RuntimeError:
+            raise RuntimeError("Set start method to spawn twice. This may be a temporary issue with the script. Please try running it again.")
 
-        for model in model_lst:
-            if model is None:
-                continue
-            model.share_memory()
+        if settings.TORCH_DEVICE == "mps" or settings.TORCH_DEVICE_MODEL == "mps":
+            print("Cannot use MPS with torch multiprocessing share_memory. This will make things less memory efficient. If you want to share memory, you have to use CUDA or CPU.  Set the TORCH_DEVICE environment variable to change the device.")
+            model_lst = None
+        else:
+            model_lst = load_all_models()
 
-    batch_count = 0
-    # Process PDFs in batches
-    for batch in get_pdf_links(BATCH_SIZE):
-        logging.info(f"Processing batch number {batch_count} containing {len(batch)} PDFs")
-        task_args = [(model_lst, drive_service, pdf_id, pdf_url) for pdf_id, pdf_url in batch]
-        total_pdfs = len(batch)
+            for model in model_lst:
+                if model is None:
+                    continue
+                model.share_memory()
+
+        batch_count = 0
+        last_successful_conversion = time.time()
         
-        # Use torch multiprocessing
-        with mp.Pool(processes=MAX_WORKERS, initializer=worker_init, initargs=(model_lst,)) as pool:
-            # Process PDFs with progress bar
-            results = list(tqdm(
-                pool.starmap(process_pdf, task_args),
-                total=total_pdfs,
-                desc="Processing PDFs",
-                unit="pdf"
-            ))
+        # Process PDFs in batches
+        for batch in get_pdf_links(BATCH_SIZE):
+            update_heartbeat()  # Update heartbeat at start of each batch
             
-            # Ensure proper cleanup
-            pool._worker_handler.terminate = worker_exit
+            if not batch:  # Exit if no PDFs to process
+                logging.info("No PDFs to process in batch. Exiting.")
+                sys.exit(0)
+                
+            logging.info(f"Processing batch number {batch_count} containing {len(batch)} PDFs")
+            task_args = [(model_lst, drive_service, pdf_id, pdf_url) for pdf_id, pdf_url in batch]
+            total_pdfs = len(batch)
             
-            # Count successful conversions
-            processed_count = sum(1 for result in results if result)
-        
-        logging.info(f"Batch complete: {processed_count}/{total_pdfs} PDFs processed successfully")
-        time.sleep(1)  # Small delay between batches
-        batch_count += 4
+            # Use torch multiprocessing
+            with mp.Pool(processes=MAX_WORKERS, initializer=worker_init, initargs=(model_lst,)) as pool:
+                # Process PDFs with progress bar
+                results = list(tqdm(
+                    pool.starmap(process_pdf, task_args),
+                    total=total_pdfs,
+                    desc="Processing PDFs",
+                    unit="pdf"
+                ))
+                
+                # Ensure proper cleanup
+                pool._worker_handler.terminate = worker_exit
+                
+                # Count successful conversions
+                processed_count = sum(1 for result in results if result)
+            
+            if processed_count > 0:
+                last_successful_conversion = time.time()
+            elif time.time() - last_successful_conversion > 900:  # 15 minutes
+                logging.error("No successful conversions in 15 minutes. Exiting.")
+                sys.exit(1)
+            
+            update_heartbeat()  # Update heartbeat after batch completion
+            
+            logging.info(f"Batch complete: {processed_count}/{total_pdfs} PDFs processed successfully")
+            time.sleep(1)
+            batch_count += 1
 
-    logging.info("Conversion and upload process completed.")
-    del model_lst
+    except Exception as e:
+        logging.error(f"Fatal error in main process: {str(e)}")
+        sys.exit(1)
+    finally:
+        if 'model_lst' in locals():
+            del model_lst
 
 
 if __name__ == "__main__":
