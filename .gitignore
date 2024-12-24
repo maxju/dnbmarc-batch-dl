@@ -12,3 +12,6 @@ client_id.json
 *.pickle
 google-service-account.json
 temp_files/
+*.log
+converter_heartbeat.txt
+failed_pdfs.json

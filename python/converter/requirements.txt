@@ -8,3 +8,4 @@ python-dotenv
 psycopg2-binary
 marker-pdf
 more-itertools
+PyPDF2

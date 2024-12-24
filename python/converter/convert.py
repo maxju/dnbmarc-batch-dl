@@ -3,7 +3,7 @@ import logging
 import sys
 from collections import deque
 import requests
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Set
 import drive_filemanager as dfm
 from get_records import get_pdf_links, mark_record_as_processed
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,6 +17,8 @@ from marker.config.parser import ConfigParser
 from marker.settings import settings
 from tqdm import tqdm
 import shutil
+import PyPDF2
+import json
 
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # For M1/M2 Macs
 os.environ["EXTRACT_IMAGES"] = "false"  # Disable image extraction
@@ -28,28 +30,90 @@ os.environ["PDFTEXT_CPU_WORKERS"] = "1" # Avoid multiprocessing inside pdftext
 DRIVE_FOLDER_ID = os.getenv('DRIVE_FOLDER_ID')
 LOCAL_TEMP_DIR = "temp_files"
 BATCH_SIZE = 5
+BLACKLIST_FILE = "failed_pdfs.json"
+
+def load_blacklist() -> Set[str]:
+    """
+    Load the blacklist of failed PDF IDs from file
+    """
+    if os.path.exists(BLACKLIST_FILE):
+        try:
+            with open(BLACKLIST_FILE, 'r') as f:
+                return set(json.load(f))
+        except Exception as e:
+            logging.error(f"Error loading blacklist: {e}")
+    return set()
+
+def add_to_blacklist(pdf_id: str):
+    """
+    Add a PDF ID to the blacklist
+    """
+    blacklist = load_blacklist()
+    blacklist.add(pdf_id)
+    try:
+        with open(BLACKLIST_FILE, 'w') as f:
+            json.dump(list(blacklist), f)
+    except Exception as e:
+        logging.error(f"Error saving blacklist: {e}")
+
+def validate_pdf(file_path: str) -> bool:
+    """
+    Validate if the downloaded file is a valid PDF.
+    """
+    try:
+        with open(file_path, 'rb') as file:
+            PyPDF2.PdfReader(file)
+        return True
+    except Exception as e:
+        logging.error(f"PDF validation failed for {file_path}: {str(e)}")
+        return False
+
+def download_with_retry(pdf_id: str, pdf_url: str, local_path: str, max_retries: int = 3) -> bool:
+    """
+    Download a PDF with retry mechanism.
+    """
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(pdf_url, stream=True)
+            response.raise_for_status()
+            with open(local_path, 'wb') as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    file.write(chunk)
+            
+            if validate_pdf(local_path):
+                return True
+            else:
+                logging.warning(f"Downloaded file is not a valid PDF, attempt {attempt + 1}/{max_retries}")
+                os.remove(local_path)
+        except Exception as e:
+            logging.warning(f"Download attempt {attempt + 1}/{max_retries} failed for PDF {pdf_id}: {str(e)}")
+            if os.path.exists(local_path):
+                os.remove(local_path)
+        
+        if attempt < max_retries - 1:
+            time.sleep(2 ** attempt)  # Exponential backoff
+    
+    # If all retries failed, add to blacklist
+    add_to_blacklist(pdf_id)
+    return False
 
 def download_batch(batch: List[Tuple[str, str]], temp_dir: str) -> List[Tuple[str, str, str]]:
     """
     Download a batch of PDFs and return list of (pdf_id, pdf_url, local_path)
     """
+    blacklist = load_blacklist()
     downloaded = []
     with tqdm(total=len(batch), desc="Downloading PDFs", unit="pdf") as pbar:
         for pdf_id, pdf_url in batch:
+            if pdf_id in blacklist:
+                logging.info(f"Skipping blacklisted PDF {pdf_id}")
+                pbar.update(1)
+                continue
+                
             local_path = os.path.join(temp_dir, f"{pdf_id}.pdf")
-            try:
-                response = requests.get(pdf_url, stream=True)
-                response.raise_for_status()
-                with open(local_path, 'wb') as file:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        file.write(chunk)
+            if download_with_retry(pdf_id, pdf_url, local_path):
                 downloaded.append((pdf_id, pdf_url, local_path))
-                pbar.update(1)
-            except Exception as e:
-                logging.error(f"Failed to download PDF {pdf_id}: {str(e)}")
-                if os.path.exists(local_path):
-                    os.remove(local_path)
-                pbar.update(1)
+            pbar.update(1)
     return downloaded
 
 def upload_file_to_drive(service, file_path: str) -> Tuple[bool, Optional[str], Optional[str]]:
