@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MAX_IDLE_MINUTES=15
+MAX_IDLE_MINUTES=30
 SCRIPT_PATH="convert.py"
 LOG_FILE="converter.log"
 HEARTBEAT_FILE="converter_heartbeat.txt"
@@ -17,17 +17,32 @@ rotate_logs() {
     fi
 }
 
+# Function to handle real-time log rotation
+process_log_line() {
+    while IFS= read -r line; do
+        echo "$line" >> "$LOG_FILE"
+        echo "$line"
+        
+        # Check log size after each write
+        local log_lines=$(wc -l < "$LOG_FILE")
+        if [ "$log_lines" -gt "$MAX_LOG_LINES" ]; then
+            # Rotate logs without logging the rotation message (to avoid recursion)
+            tail -n $MAX_LOG_LINES "$LOG_FILE" > "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
+        fi
+    done
+}
+
 # Initial log rotation
 if [ -f "$LOG_FILE" ]; then
     rotate_logs
 fi
 
 cleanup() {
-    echo "$(date): Initiating cleanup..." | tee -a $LOG_FILE
+    echo "$(date): Initiating cleanup..." | process_log_line
     
     # Kill all child processes in the process group
     if [ ! -z "$PID" ]; then
-        echo "$(date): Terminating conversion process and its children..." | tee -a $LOG_FILE
+        echo "$(date): Terminating conversion process and its children..." | process_log_line
         pkill -TERM -P $PID 2>/dev/null
         sleep 2
         pkill -KILL -P $PID 2>/dev/null
@@ -36,16 +51,16 @@ cleanup() {
     fi
     
     # Cleanup any stray Python processes
-    echo "$(date): Cleaning up any remaining processes..." | tee -a $LOG_FILE
+    echo "$(date): Cleaning up any remaining processes..." | process_log_line
     pkill -f "anaconda3/envs/dnb-converter/bin/python3.*multiprocessing" 2>/dev/null
     
     # Remove heartbeat file
     if [ -f "$HEARTBEAT_FILE" ]; then
-        echo "$(date): Removing heartbeat file..." | tee -a $LOG_FILE
+        echo "$(date): Removing heartbeat file..." | process_log_line
         rm -f $HEARTBEAT_FILE
     fi
     
-    echo "$(date): Cleanup complete. Exiting..." | tee -a $LOG_FILE
+    echo "$(date): Cleanup complete. Exiting..." | process_log_line
     exit 0
 }
 
@@ -60,17 +75,17 @@ check_process_health() {
         DIFF_SECONDS=$((CURRENT_TIME - HEARTBEAT_TIME))
         
         if [ $DIFF_SECONDS -gt $((MAX_IDLE_MINUTES * 60)) ]; then
-            echo "$(date): Process heartbeat too old ($DIFF_SECONDS seconds). Restarting..." | tee -a $LOG_FILE
+            echo "$(date): Process heartbeat too old ($DIFF_SECONDS seconds). Restarting..." | process_log_line
             return 1
         fi
     else
-        echo "$(date): No heartbeat file found. Restarting..." | tee -a $LOG_FILE
+        echo "$(date): No heartbeat file found. Restarting..." | process_log_line
         return 1
     fi
     
     # Check if process is actually running
     if ! kill -0 $PID 2>/dev/null; then
-        echo "$(date): Process not running. Restarting..." | tee -a $LOG_FILE
+        echo "$(date): Process not running. Restarting..." | process_log_line
         return 1
     fi
     
@@ -78,8 +93,8 @@ check_process_health() {
 }
 
 while true; do
-    # Start the conversion script
-    python3 $SCRIPT_PATH 2>&1 | tee -a $LOG_FILE &
+    # Start the conversion script with real-time log processing
+    python3 $SCRIPT_PATH 2>&1 | process_log_line &
     PID=$!
     
     while true; do
@@ -89,14 +104,9 @@ while true; do
         CURRENT_TIME=$(date +%s)
         UPTIME=$((CURRENT_TIME - LAST_RESTART))
         
-        # Rotate logs periodically
-        if [ $((UPTIME % ROTATE_CHECK_INTERVAL)) -eq 0 ]; then
-            rotate_logs
-        fi
-        
         if ! check_process_health; then
             if [ $UPTIME -lt $MIN_UPTIME_SECONDS ]; then
-                echo "$(date): Process failed too quickly. Waiting before restart..." | tee -a $LOG_FILE
+                echo "$(date): Process failed too quickly. Waiting before restart..." | process_log_line
                 sleep 30
             fi
             kill -9 $PID 2>/dev/null
@@ -105,6 +115,6 @@ while true; do
         fi
     done
     
-    echo "$(date): Restarting process in 10 seconds..." | tee -a $LOG_FILE
+    echo "$(date): Restarting process in 10 seconds..." | process_log_line
     sleep 10
 done

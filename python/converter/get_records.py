@@ -1,11 +1,12 @@
 import logging
-from typing import List, Tuple, Generator
+from typing import List, Tuple, Generator, Set
 from sqlalchemy import func
 import sys
 import os
 from datetime import timedelta
 import time
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
+import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.pg_model import get_engine, get_session, DNBRecord, retry_on_db_error
 
@@ -75,19 +76,33 @@ def mark_record_as_processed(pdf_id: str, drive_file_id: str, drive_filename: st
         else:
             logging.warning(f"Record with ID {pdf_id} not found")
 
+def load_blacklist() -> Set[str]:
+    """Load the blacklist of failed PDF IDs from file."""
+    blacklist_file = "failed_pdfs.json"
+    if os.path.exists(blacklist_file):
+        try:
+            with open(blacklist_file, 'r') as f:
+                return set(json.load(f))
+        except Exception as e:
+            logging.error(f"Error loading blacklist: {e}")
+    return set()
+
 def get_pdf_links(batch_size: int = 100) -> Generator[List[Tuple[str, str]], None, None]:
     """Retrieve PDF links with retry logic."""
     try:
         total_records = get_total_records()
         progress = ProgressTracker(total_records, batch_size)
+        blacklist = load_blacklist()  # Load blacklist once at start
         
         offset = 0
         while True:
             try:
                 with get_session(engine) as session:
+                    # Query that excludes blacklisted IDs
                     results = session.query(DNBRecord.idn, DNBRecord.url_dnb_archive)\
                         .filter(DNBRecord.url_dnb_archive.isnot(None))\
                         .filter(DNBRecord.converted_file.is_(None))\
+                        .filter(~DNBRecord.idn.in_(blacklist))\
                         .order_by(DNBRecord.idn)\
                         .offset(offset)\
                         .limit(batch_size)\
