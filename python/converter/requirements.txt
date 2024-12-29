@@ -6,6 +6,6 @@ requests
 sqlalchemy
 python-dotenv
 psycopg2-binary
-marker-pdf
+marker-pdf==0.3.0
 more-itertools
 PyPDF2

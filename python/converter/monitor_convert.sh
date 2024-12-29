@@ -20,15 +20,19 @@ rotate_logs() {
 # Function to handle real-time log rotation
 process_log_line() {
     while IFS= read -r line; do
+        # First, check if we need to rotate before adding the new line
+        local log_lines=0
+        if [ -f "$LOG_FILE" ]; then
+            log_lines=$(wc -l < "$LOG_FILE")
+            if [ "$log_lines" -ge "$MAX_LOG_LINES" ]; then
+                # Keep MAX_LOG_LINES - 1 to make room for the new line
+                tail -n $((MAX_LOG_LINES - 1)) "$LOG_FILE" > "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
+            fi
+        fi
+        
+        # Now append the new line and display it
         echo "$line" >> "$LOG_FILE"
         echo "$line"
-        
-        # Check log size after each write
-        local log_lines=$(wc -l < "$LOG_FILE")
-        if [ "$log_lines" -gt "$MAX_LOG_LINES" ]; then
-            # Rotate logs without logging the rotation message (to avoid recursion)
-            tail -n $MAX_LOG_LINES "$LOG_FILE" > "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
-        fi
     done
 }
 
