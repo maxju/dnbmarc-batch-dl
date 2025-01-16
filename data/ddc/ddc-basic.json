@@ -1,0 +1,262 @@
+{
+  "0": {
+    "name": "Informatik, Information & Wissen, allgemeine Werke",
+    "sub": {
+      "000": {
+        "name": "Informatik, Wissen & Systeme"
+      },
+      "010": {
+        "name": "Bibliografien"
+      },
+      "020": {
+        "name": "Bibliotheks- & Informationswissenschaften"
+      },
+      "030": {
+        "name": "Enzyklopädien & Faktenbücher"
+      },
+      "040": {
+        "name": "[Unbesetzt]"
+      },
+      "050": {
+        "name": "Magazine, Zeitschriften & fortlaufende Sammelwerke"
+      },
+      "060": {
+        "name": "Verbände, Organisationen & Museen"
+      },
+      "070": {
+        "name": "Publizistische Medien, Journalismus & Verlagswesen"
+      },
+      "080": {
+        "name": "Allgemeine Sammelwerke"
+      },
+      "090": {
+        "name": "Handschriften & seltene Bücher"
+      }
+    }
+  },
+  "1": {
+    "name": "Philosophie & Psychologie",
+    "sub": {
+      "100": {
+        "name": "Philosophie"
+      },
+      "110": {
+        "name": "Metaphysik"
+      },
+      "120": {
+        "name": "Epistemologie"
+      },
+      "130": {
+        "name": "Parapsychologie & Okkultismus"
+      },
+      "140": {
+        "name": "Philosophische Schulen"
+      },
+      "150": {
+        "name": "Psychologie"
+      },
+      "160": {
+        "name": "Philosophische Logik"
+      },
+      "170": {
+        "name": "Ethik"
+      },
+      "180-190": {
+        "name": "Geschichte, geografische Behandlung, Biografien"
+      }
+    }
+  },
+  "2": {
+    "name": "Religion",
+    "sub": {
+      "200": {
+        "name": "Religion"
+      },
+      "210": {
+        "name": "Religionsphilosophie & Religionstheorie"
+      },
+      "220-290": {
+        "name": "Bibel und einzelne Religionen"
+      }
+    }
+  },
+  "3": {
+    "name": "Sozialwissenschaften",
+    "sub": {
+      "300": {
+        "name": "Sozialwissenschaften, Soziologie & Anthropologie"
+      },
+      "310": {
+        "name": "Statistiken"
+      },
+      "320": {
+        "name": "Politikwissenschaft"
+      },
+      "330": {
+        "name": "Wirtschaft"
+      },
+      "340": {
+        "name": "Recht"
+      },
+      "350": {
+        "name": "Öffentliche Verwaltung & Militärwissenschaft"
+      },
+      "360": {
+        "name": "Soziale Probleme & Sozialdienste"
+      },
+      "370": {
+        "name": "Bildung & Erziehung"
+      },
+      "380": {
+        "name": "Handel, Kommunikation & Verkehr"
+      },
+      "390": {
+        "name": "Bräuche, Etikette & Folklore"
+      }
+    }
+  },
+  "4": {
+    "name": "Sprache",
+    "sub": {
+      "400": {
+        "name": "Sprache"
+      },
+      "410": {
+        "name": "Linguistik"
+      },
+      "420-490": {
+        "name": "Einzelne Sprachen"
+      }
+    }
+  },
+  "5": {
+    "name": "Naturwissenschaften",
+    "sub": {
+      "500": {
+        "name": "Naturwissenschaften"
+      },
+      "510": {
+        "name": "Mathematik"
+      },
+      "520": {
+        "name": "Astronomie"
+      },
+      "530": {
+        "name": "Physik"
+      },
+      "540": {
+        "name": "Chemie"
+      },
+      "550": {
+        "name": "Geowissenschaften & Geologie"
+      },
+      "560": {
+        "name": "Fossilien & prähistorisches Leben"
+      },
+      "570": {
+        "name": "Biologie"
+      },
+      "580-590": {
+        "name": "Naturgeschichte von Pflanzen und Tieren"
+      }
+    }
+  },
+  "6": {
+    "name": "Technik",
+    "sub": {
+      "600": {
+        "name": "Technik"
+      },
+      "610": {
+        "name": "Medizin & Gesundheit"
+      },
+      "620": {
+        "name": "Ingenieurwissenschaften"
+      },
+      "630": {
+        "name": "Landwirtschaft"
+      },
+      "640": {
+        "name": "Hauswirtschaft & Familie"
+      },
+      "650": {
+        "name": "Management & Öffentlichkeitsarbeit"
+      },
+      "660": {
+        "name": "Chemische Verfahrenstechnik"
+      },
+      "670": {
+        "name": "Industrielle Fertigung"
+      },
+      "680": {
+        "name": "Industrielle Fertigung für einzelne Verwendungszwecke"
+      },
+      "690": {
+        "name": "Bau von Gebäuden"
+      }
+    }
+  },
+  "7": {
+    "name": "Künste & Unterhaltung",
+    "sub": {
+      "700": {
+        "name": "Künste"
+      },
+      "710": {
+        "name": "Raumplanung & Landschaftsarchitektur"
+      },
+      "720": {
+        "name": "Architektur"
+      },
+      "730": {
+        "name": "Bildhauerkunst, Keramik & Metallkunst"
+      },
+      "740": {
+        "name": "Grafik & angewandte Kunst"
+      },
+      "750": {
+        "name": "Malerei"
+      },
+      "760": {
+        "name": "Druckgrafik & Drucke"
+      },
+      "770": {
+        "name": "Fotografie, Computerkunst, Film, Video"
+      },
+      "780": {
+        "name": "Musik"
+      },
+      "790": {
+        "name": "Sport, Spiele & Unterhaltung"
+      }
+    }
+  },
+  "8": {
+    "name": "Literatur",
+    "sub": {
+      "800": {
+        "name": "Literatur, Rhetorik & Literaturwissenschaft"
+      },
+      "810-890": {
+        "name": "Literaturen einzelner Sprachen und Sprachfamilien"
+      }
+    }
+  },
+  "9": {
+    "name": "Geschichte & Geografie",
+    "sub": {
+      "900": {
+        "name": "Geschichte"
+      },
+      "910": {
+        "name": "Geografie & Reisen"
+      },
+      "920": {
+        "name": "Biografie & Genealogie"
+      },
+      "930-990": {
+        "name": "Geschichte einzelner Kontinente, Länder, Ortschaften; außerirdischer Welten"
+      }
+    }
+  }
+}

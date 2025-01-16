@@ -1,16 +1,72 @@
-version: '3.8'
-
+---
 services:
-  downloader:
+  # downloader:
+  #   build:
+  #     context: .
+  #     target: downloader
+  #   volumes:
+  #     - ./data:/data
+  #     - ./python:/app
+  #   restart: unless-stopped
+  #   mem_limit: 2g
+  #   memswap_limit: 2g
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #   command: python downloader.py
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    mem_limit: 2g
+    memswap_limit: 2g
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=dnb
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=dnb_records
+    volumes:
+      - ./data/pg_data:/var/lib/postgresql/data
+
+  postgres_migrator:
     build:
       context: .
-      target: downloader
+      target: abstract_finder
     volumes:
       - ./data:/data
       - ./python:/app
-    restart: unless-stopped
+    restart: no
+    mem_limit: 4g
+    memswap_limit: 4g
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: "python /app/utils/migrate_to_postgres.py"
+    # command: env
+
+  abstract_finder:
+    build:
+      context: .
+      target: abstract_finder
+    volumes:
+      - ./data:/data
+      - ./python:/app
+    restart: no
     mem_limit: 2g
     memswap_limit: 2g
     environment:
       - PYTHONUNBUFFERED=1
-    command: python downloader.py
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+  converter:
+    build:
+      context: .
+      target: converter
+    volumes:
+      - ./data:/data
+      - ./python:/app
+    env_file:
+      - .env
+    environment:
+    - DNNL_VERBOSE=0
+    - EXTRACT_IMAGES=false
+    restart: no
