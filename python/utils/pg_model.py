@@ -16,7 +16,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 Base = declarative_base()
 
 class DNBRecord(Base):
-    __tablename__ = os.getenv('DNB_TABLE_NAME', "dnb_records")  # Default to dnb_records_subset if not specified
+    __tablename__ = os.getenv('DNB_TABLE_NAME', "dnb_records_subset")  # Default to dnb_records_subset if not specified
     id = Column(Integer, primary_key=True, autoincrement=True)
     idn = Column(String, unique=True, index=True)  # DNB IDN identifier
     title = Column(Text)

@@ -6,6 +6,7 @@ data/*
 *.db
 __pycache__/
 downloader/dnb_records.db
+python/converter2/data/*
 .vscode/
 .env
 client_id.json

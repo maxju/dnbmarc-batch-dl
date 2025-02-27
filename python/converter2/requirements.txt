@@ -1,0 +1,6 @@
+sqlalchemy==2.0.28
+psycopg2-binary
+requests
+pymupdf
+tqdm
+marker-pdf
