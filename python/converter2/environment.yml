@@ -1,0 +1,19 @@
+name: dnb-converter-2
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - libarchive      # For archive handling
+  - gcc             # For compiled dependencies
+  - pip:
+    - marker-pdf
+    - sqlalchemy==2.0.28
+    - psycopg2-binary
+    - requests
+    - python-dotenv
+    - pymupdf       # PyMuPDF (fitz)
+    - tqdm
+    - concurrent-log-handler
+    - pyyaml 
