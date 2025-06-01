@@ -9,14 +9,13 @@ import time
 import logging
 import random
 
-# Load environment variables from the project root
 load_dotenv()
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 Base = declarative_base()
 
 class DNBRecord(Base):
-    __tablename__ = os.getenv('DNB_TABLE_NAME', "dnb_records_subset")  # Default to dnb_records_subset if not specified
+    __tablename__ = os.getenv('DNB_TABLE_NAME', "dnb_records_subset")
     id = Column(Integer, primary_key=True, autoincrement=True)
     idn = Column(String, unique=True, index=True)  # DNB IDN identifier
     title = Column(Text)
@@ -102,7 +101,6 @@ def get_session(engine):
     Session = sessionmaker(bind=engine)
     return Session()
 
-# Only create tables if this file is run directly
 if __name__ == "__main__":
     engine = get_engine()
     print(f"Creating tables in PostgreSQL database")

@@ -17,10 +17,8 @@ import concurrent.futures
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.pg_model import get_engine, DNBRecord
 
-# Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Replace existing session management code
 engine = get_engine()
 SessionFactory = scoped_session(sessionmaker(bind=engine))
 
@@ -54,7 +52,6 @@ def download_and_save_file(id, url, download_dir):
     """Downloads PDF without updating database"""
     temp_file_path = None
     try:
-        # Existing download logic from downloader.py
         with requests.get(url, timeout=60, allow_redirects=True, stream=True) as response:
             response.raise_for_status()
 
@@ -62,7 +59,6 @@ def download_and_save_file(id, url, download_dir):
             file_name = f"{id}{file_extension}"
             final_file_path = os.path.join(download_dir, file_name)
 
-            # Skip if file already exists
             if os.path.exists(final_file_path):
                 logging.info(f"File already exists: {file_name}")
                 return file_name
@@ -104,17 +100,14 @@ def download_and_update(record: DNBRecord, download_dir: str):
     """Modified version without DB writes"""
     try:
         with get_session() as session:
-            # Corrected line: filter by idn instead of using get() with primary key
             fresh_record = session.query(DNBRecord).filter(DNBRecord.idn == record.idn).first()
             if not fresh_record:
                 return
 
-            # Skip if file exists locally
             expected_path = os.path.join(download_dir, f"{fresh_record.idn}.pdf")
             if os.path.exists(expected_path):
                 return
 
-            # Perform download
             result = download_and_save_file(
                 fresh_record.idn,
                 fresh_record.url_dnb_archive,
@@ -148,7 +141,6 @@ def process_downloads(download_dir: str, max_workers: int = 4):
 
         logging.info(f"Found {total_to_download:,} unconverted records to download")
 
-        # Use tqdm for progress tracking
         with tqdm(total=total_to_download, desc="Downloading PDFs", unit="file") as pbar:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = []
@@ -168,7 +160,6 @@ def process_downloads(download_dir: str, max_workers: int = 4):
                                 logging.error(f"Error in future: {str(e)}")
                             futures.remove(f)
 
-                # Process remaining futures
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         future.result()

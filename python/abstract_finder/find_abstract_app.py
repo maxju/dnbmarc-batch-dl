@@ -10,16 +10,13 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils.pg_model import get_engine, DNBRecord, get_session
 
-# Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Load environment variables
 load_dotenv()
 data_dir = os.getenv("data_dir") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 files_dir = os.path.join(data_dir, "files")
 
-# Get database connection
 engine = get_engine()
 Session = sessionmaker(engine)
 

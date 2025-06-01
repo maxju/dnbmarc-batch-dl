@@ -6,7 +6,6 @@ import os
 
 Base = declarative_base()
 
-# Define the DNBRecord class
 class DNBRecord(Base):
     __tablename__ = 'dnb_records'
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -38,7 +37,6 @@ class DNBRecord(Base):
     url_resolving_system = Column(String)
     url_publisher = Column(String)
 
-# Database setup
 current_dir = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.getenv('DATA_DIR') or os.path.join(current_dir, '../data')
 db_path = os.path.join(DATA_DIR, 'dnb_records.db')
@@ -46,5 +44,4 @@ engine = create_engine(f'sqlite:///{db_path}')
 
 Base.metadata.create_all(engine)
 
-# Create a session factory
 Session = sessionmaker(bind=engine)

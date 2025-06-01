@@ -20,7 +20,7 @@ from utils.pg_model import get_engine, init_db, get_session, DNBRecord
 
 
 # Create a scoped session factory
-engine = get_engine() # Create tables if they don't exist
+engine = get_engine()
 SessionFactory = scoped_session(sessionmaker(bind=engine))
 
 def pretty_print_time(duration):
@@ -71,7 +71,6 @@ def download_and_save_file(id, url, download_dir, timeout=90):
             # Create a temporary file
             with tempfile.NamedTemporaryFile(delete=False, dir=download_dir, prefix=f"{id}_temp_", suffix=file_extension) as temp_file:
                 temp_file_path = temp_file.name
-                # Write file in chunks
                 for chunk in response.iter_content(chunk_size=8192): 
                     if chunk:
                         temp_file.write(chunk)
@@ -99,7 +98,6 @@ def download_and_save_file(id, url, download_dir, timeout=90):
             except Exception as e:
                 logging.error(f"Error deleting temporary file {temp_file_path}: {e}")
         
-        # Force garbage collection
         del response
         gc.collect()
 
@@ -108,7 +106,6 @@ def process_record(record_id, url_dnb_archive, download_dir, session_factory):
 
     session = SessionFactory()
     try:
-        # Check if the file is already downloaded
         record = session.get(DNBRecord, record_id)
         if not record:
             logging.error(f"Record not found: {record_id}")
@@ -199,7 +196,6 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                         break
 
                 if not active_futures:
-                    # No more active futures and no more records to process
                     break
 
                 # Wait for the next future to complete
@@ -229,7 +225,6 @@ def process_records(download_dir, max_concurrent_downloads=10, batch_size=1000):
                         print_progress(f"Progress: {progress:.2f}% ({completed_records}/{records_with_url}) ETA: {eta}", end='')
                         last_progress_update = current_time
 
-                        # Explicitly call garbage collection periodically
                         if completed_records % batch_size == 0:
                             gc.collect()
 

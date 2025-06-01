@@ -106,20 +106,17 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
     engine = get_engine()
-    init_db(engine)  # Create tables if they don't exist
+    init_db(engine)
     session = get_session(engine)
 
-    # Initialize variables
     records_to_add = []
     batch_size = 1000
     records = 0
 
-    # Construct the path to the MARC XML file
     data_dir = os.getenv('DATA_DIR') or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
     marc_file = 'dnb-all_online_hochschulschriften_frei_dnbmarc_20240327mrc.xml'
     marc_file_path = os.path.join(data_dir, marc_file)
 
-    # Process the MARC XML file
     map_xml(process_record, marc_file_path)
 
     # Commit any remaining records

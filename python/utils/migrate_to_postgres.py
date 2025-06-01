@@ -10,7 +10,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.getenv('data_dir') or os.path.join(current_dir, '../data')
 db_path = os.path.join(DATA_DIR, 'dnb_records.db')
 
-# SQLite connection
 sqlite_conn = sqlite3.connect(db_path)
 sqlite_cursor = sqlite_conn.cursor()
 
@@ -20,19 +19,16 @@ def safe_int(value):
     except ValueError:
         return None
 
-# Fetch all data from SQLite
 sqlite_cursor.execute("SELECT * FROM dnb_records")
 column_names = [description[0] for description in sqlite_cursor.description]
 records = [dict(zip(column_names, record)) for record in sqlite_cursor.fetchall()]
 
-# Insert data into PostgreSQL
 engine = get_engine()
 session = get_session(engine)
 
 try:
     is_empty = session.query(func.count(DNBRecord.id)).scalar() == 0
 except ProgrammingError:
-    # Table doesn't exist, so we'll consider it empty
     is_empty = True
     init_db(engine)
 
@@ -71,16 +67,16 @@ if is_empty:
         )
         try:
             session.add(dnb_record)
-            session.flush()  # This will attempt to insert the record without committing
+            session.flush() 
             successful_inserts += 1
         except SQLAlchemyError as e:
             print(f"Error inserting record with idn {record['idn']}:")
             print(str(e))
             print("Problematic record data:")
             print(json.dumps({k: str(v) for k, v in dnb_record.__dict__.items() if not k.startswith('_')}, indent=2))
-            session.rollback()  # Roll back the failed insertion
+            session.rollback()
             failed_inserts += 1
-            continue  # Skip to the next record
+            continue
 
     try:
         session.commit()
@@ -95,5 +91,4 @@ else:
 
 session.close()
 
-# Close connections
 sqlite_conn.close()
